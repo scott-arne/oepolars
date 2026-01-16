@@ -34,6 +34,8 @@ log.setLevel(logging.INFO)
 
 # Export extension types
 # Export exceptions
+# Register namespaces (import for side effects)
+from oepolars import namespaces as _namespaces  # noqa: E402, F401
 from oepolars.exceptions import (  # noqa: E402
     FileError,
     InvalidMolecule,
