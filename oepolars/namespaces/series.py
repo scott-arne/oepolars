@@ -4,6 +4,7 @@ import polars as pl
 from openeye import oechem
 
 from oepolars.exceptions import InvalidSMARTS
+from oepolars.types import MoleculeType
 
 
 def _is_molecule_type(dtype: pl.DataType) -> bool:
@@ -168,3 +169,35 @@ class SeriesOENamespace:
             match_mol,
             return_dtype=pl.Boolean,
         ).fill_null(False)
+
+    def copy_molecules(self) -> pl.Series:
+        """
+        Create deep copies of all molecules in the Series.
+
+        Returns
+        -------
+        pl.Series
+            New Series with independent copies of each molecule.
+
+        Raises
+        ------
+        TypeError
+            If the Series is not a MoleculeType.
+
+        Examples
+        --------
+        >>> copied = s.oe.copy_molecules()
+        >>> # Modifying original doesn't affect copy
+        """
+        if not _is_molecule_type(self._series.dtype):
+            raise TypeError(
+                f"copy_molecules() requires MoleculeType, got {self._series.dtype}"
+            )
+
+        def copy_mol(mol: oechem.OEMolBase | None) -> oechem.OEMol | None:
+            if mol is None:
+                return None
+            return oechem.OEMol(mol)
+
+        copied = [copy_mol(mol) for mol in self._series.to_list()]
+        return pl.Series(self._series.name, copied, dtype=MoleculeType())

@@ -171,3 +171,44 @@ class TestSeriesSubsearch:
         s = pl.Series("x", ["a", "b", "c"])
         with pytest.raises(TypeError, match="MoleculeType"):
             s.oe.subsearch("c1ccccc1")
+
+
+class TestSeriesCopyMolecules:
+    @pytest.fixture
+    def molecule_series(self):
+        mols = []
+        for smi in ["CCO", "c1ccccc1"]:
+            mol = oechem.OEMol()
+            oechem.OEParseSmiles(mol, smi)
+            mols.append(mol)
+        return pl.Series("mol", mols, dtype=MoleculeType())
+
+    def test_copy_molecules_returns_series(self, molecule_series):
+        result = molecule_series.oe.copy_molecules()
+        assert isinstance(result, pl.Series)
+
+    def test_copy_molecules_preserves_dtype(self, molecule_series):
+        result = molecule_series.oe.copy_molecules()
+        assert result.dtype.ext_name() == "molecule"
+
+    def test_copy_molecules_creates_independent_copies(self, molecule_series):
+        result = molecule_series.oe.copy_molecules()
+        # Modify original
+        original_mol = molecule_series[0]
+        original_mol.SetTitle("modified")
+        # Check copy is unaffected
+        copied_mol = result[0]
+        assert copied_mol.GetTitle() != "modified"
+
+    def test_copy_molecules_with_nulls(self):
+        mol = oechem.OEMol()
+        oechem.OEParseSmiles(mol, "CCO")
+        s = pl.Series("mol", [mol, None], dtype=MoleculeType())
+        result = s.oe.copy_molecules()
+        assert result[0] is not None
+        assert result[1] is None
+
+    def test_copy_molecules_wrong_type_raises(self):
+        s = pl.Series("x", ["a", "b", "c"])
+        with pytest.raises(TypeError, match="MoleculeType"):
+            s.oe.copy_molecules()
