@@ -1,6 +1,7 @@
 """Series namespace for OpenEye operations."""
 
 import polars as pl
+from openeye import oechem
 
 
 def _is_molecule_type(dtype: pl.DataType) -> bool:
@@ -56,3 +57,49 @@ class SeriesOENamespace:
             )
 
         return self._series.is_not_null()
+
+    def to_smiles(self, flavor: int = oechem.OESMILESFlag_ISOMERIC) -> pl.Series:
+        """
+        Generate SMILES strings from molecules.
+
+        Parameters
+        ----------
+        flavor
+            SMILES generation options (bitmask from oechem.OESMILESFlag_*).
+            Default is OESMILESFlag_ISOMERIC for isomeric SMILES.
+
+        Returns
+        -------
+        pl.Series
+            String Series containing SMILES representations.
+
+        Raises
+        ------
+        TypeError
+            If the Series is not a MoleculeType.
+
+        Examples
+        --------
+        >>> s.oe.to_smiles()
+        shape: (3,)
+        Series: 'mol' [str]
+        [
+            "CCO"
+            "c1ccccc1"
+            "CC(=O)O"
+        ]
+        """
+        if not _is_molecule_type(self._series.dtype):
+            raise TypeError(
+                f"to_smiles() requires MoleculeType, got {self._series.dtype}"
+            )
+
+        def mol_to_smiles(mol: oechem.OEMolBase | None) -> str | None:
+            if mol is None:
+                return None
+            return oechem.OECreateSmiString(mol, flavor)
+
+        return self._series.map_elements(
+            mol_to_smiles,
+            return_dtype=pl.String,
+        )

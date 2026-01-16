@@ -72,3 +72,47 @@ class TestSeriesIsValid:
         s = pl.Series("du", [du, None], dtype=DesignUnitType())
         result = s.oe.is_valid()
         assert result.to_list() == [True, False]
+
+
+class TestSeriesToSmiles:
+    @pytest.fixture
+    def molecule_series(self):
+        mols = []
+        for smi in ["CCO", "c1ccccc1", "CC(=O)O"]:
+            mol = oechem.OEMol()
+            oechem.OEParseSmiles(mol, smi)
+            mols.append(mol)
+        return pl.Series("mol", mols, dtype=MoleculeType())
+
+    def test_to_smiles_returns_series(self, molecule_series):
+        result = molecule_series.oe.to_smiles()
+        assert isinstance(result, pl.Series)
+
+    def test_to_smiles_dtype_is_string(self, molecule_series):
+        result = molecule_series.oe.to_smiles()
+        assert result.dtype == pl.String
+
+    def test_to_smiles_generates_valid_smiles(self, molecule_series):
+        result = molecule_series.oe.to_smiles()
+        # Check that we can parse the generated SMILES back
+        for smi in result.to_list():
+            mol = oechem.OEMol()
+            assert oechem.OEParseSmiles(mol, smi)
+
+    def test_to_smiles_with_nulls(self):
+        mol = oechem.OEMol()
+        oechem.OEParseSmiles(mol, "CCO")
+        s = pl.Series("mol", [mol, None], dtype=MoleculeType())
+        result = s.oe.to_smiles()
+        assert result[0] is not None
+        assert result[1] is None
+
+    def test_to_smiles_with_flavor(self, molecule_series):
+        # Test with isomeric flag
+        result = molecule_series.oe.to_smiles(flavor=oechem.OESMILESFlag_Canonical)
+        assert isinstance(result, pl.Series)
+
+    def test_to_smiles_wrong_type_raises(self):
+        s = pl.Series("x", ["a", "b", "c"])
+        with pytest.raises(TypeError, match="MoleculeType"):
+            s.oe.to_smiles()
