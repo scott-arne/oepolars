@@ -3,6 +3,8 @@
 import polars as pl
 from openeye import oechem
 
+from oepolars.exceptions import InvalidSMARTS
+
 
 def _is_molecule_type(dtype: pl.DataType) -> bool:
     """Check if dtype is MoleculeType."""
@@ -103,3 +105,66 @@ class SeriesOENamespace:
             mol_to_smiles,
             return_dtype=pl.String,
         )
+
+    def subsearch(
+        self,
+        pattern: str | oechem.OESubSearch,
+        *,
+        adjustH: bool = False,
+    ) -> pl.Series:
+        """
+        Perform substructure search on molecules.
+
+        Parameters
+        ----------
+        pattern
+            SMARTS pattern string or OESubSearch object.
+        adjustH
+            If True, adjust implicit/explicit hydrogens to match query.
+
+        Returns
+        -------
+        pl.Series
+            Boolean Series where True indicates a substructure match.
+
+        Raises
+        ------
+        TypeError
+            If the Series is not a MoleculeType.
+        InvalidSMARTS
+            If the pattern is an invalid SMARTS string.
+
+        Examples
+        --------
+        >>> s.oe.subsearch("c1ccccc1")  # Find molecules with benzene ring
+        shape: (4,)
+        Series: 'mol' [bool]
+        [
+            false
+            true
+            false
+            true
+        ]
+        """
+        if not _is_molecule_type(self._series.dtype):
+            raise TypeError(
+                f"subsearch() requires MoleculeType, got {self._series.dtype}"
+            )
+
+        # Create OESubSearch object if string pattern provided
+        if isinstance(pattern, str):
+            ss = oechem.OESubSearch()
+            if not ss.Init(pattern):
+                raise InvalidSMARTS(f"Invalid SMARTS pattern: {pattern}")
+        else:
+            ss = pattern
+
+        def match_mol(mol: oechem.OEMolBase) -> bool:
+            if adjustH:
+                oechem.OEPrepareSearch(mol, ss)
+            return ss.SingleMatch(mol)
+
+        return self._series.map_elements(
+            match_mol,
+            return_dtype=pl.Boolean,
+        ).fill_null(False)

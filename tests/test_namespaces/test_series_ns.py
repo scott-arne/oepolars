@@ -5,6 +5,7 @@ from openeye import oechem
 # Import to register namespace
 import oepolars  # noqa: F401
 from oepolars import MoleculeType
+from oepolars.exceptions import InvalidSMARTS
 
 
 class TestSeriesNamespaceRegistration:
@@ -116,3 +117,57 @@ class TestSeriesToSmiles:
         s = pl.Series("x", ["a", "b", "c"])
         with pytest.raises(TypeError, match="MoleculeType"):
             s.oe.to_smiles()
+
+
+class TestSeriesSubsearch:
+    @pytest.fixture
+    def molecule_series(self):
+        mols = []
+        smiles_list = ["CCO", "c1ccccc1", "CC(=O)O", "c1ccc(O)cc1"]  # ethanol, benzene, acetic acid, phenol
+        for smi in smiles_list:
+            mol = oechem.OEMol()
+            oechem.OEParseSmiles(mol, smi)
+            mols.append(mol)
+        return pl.Series("mol", mols, dtype=MoleculeType())
+
+    def test_subsearch_returns_series(self, molecule_series):
+        result = molecule_series.oe.subsearch("c1ccccc1")
+        assert isinstance(result, pl.Series)
+
+    def test_subsearch_dtype_is_bool(self, molecule_series):
+        result = molecule_series.oe.subsearch("c1ccccc1")
+        assert result.dtype == pl.Boolean
+
+    def test_subsearch_finds_benzene_ring(self, molecule_series):
+        result = molecule_series.oe.subsearch("c1ccccc1")
+        # benzene and phenol have benzene rings
+        expected = [False, True, False, True]
+        assert result.to_list() == expected
+
+    def test_subsearch_finds_hydroxyl(self, molecule_series):
+        result = molecule_series.oe.subsearch("[OH]")
+        # ethanol, acetic acid (carboxylic OH), and phenol have hydroxyl
+        expected = [True, False, True, True]
+        assert result.to_list() == expected
+
+    def test_subsearch_with_oesub_search_object(self, molecule_series):
+        ss = oechem.OESubSearch("c1ccccc1")
+        result = molecule_series.oe.subsearch(ss)
+        expected = [False, True, False, True]
+        assert result.to_list() == expected
+
+    def test_subsearch_with_nulls(self):
+        mol = oechem.OEMol()
+        oechem.OEParseSmiles(mol, "c1ccccc1")
+        s = pl.Series("mol", [mol, None], dtype=MoleculeType())
+        result = s.oe.subsearch("c1ccccc1")
+        assert result.to_list() == [True, False]
+
+    def test_subsearch_invalid_smarts_raises(self, molecule_series):
+        with pytest.raises(InvalidSMARTS):
+            molecule_series.oe.subsearch("invalid[[[smarts")
+
+    def test_subsearch_wrong_type_raises(self):
+        s = pl.Series("x", ["a", "b", "c"])
+        with pytest.raises(TypeError, match="MoleculeType"):
+            s.oe.subsearch("c1ccccc1")
