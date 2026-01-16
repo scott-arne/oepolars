@@ -1,0 +1,2 @@
+polars>=1.37.1
+openeye-toolkits>=2023.1.0
