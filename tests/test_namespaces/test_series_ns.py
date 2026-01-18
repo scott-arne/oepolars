@@ -4,7 +4,7 @@ from openeye import oechem
 
 # Import to register namespace
 import oepolars  # noqa: F401
-from oepolars import MoleculeType
+from oepolars import DesignUnitType, MoleculeType
 from oepolars.exceptions import InvalidSMARTS
 
 
@@ -212,3 +212,89 @@ class TestSeriesCopyMolecules:
         s = pl.Series("x", ["a", "b", "c"])
         with pytest.raises(TypeError, match="MoleculeType"):
             s.oe.copy_molecules()
+
+
+class TestSeriesDesignUnitOperations:
+    def test_copy_design_units_returns_series(self):
+        du = oechem.OEDesignUnit()
+        s = pl.Series("du", [du], dtype=DesignUnitType())
+        result = s.oe.copy_design_units()
+        assert isinstance(result, pl.Series)
+
+    def test_copy_design_units_preserves_dtype(self):
+        du = oechem.OEDesignUnit()
+        s = pl.Series("du", [du], dtype=DesignUnitType())
+        result = s.oe.copy_design_units()
+        assert result.dtype.ext_name() == "design_unit"
+
+    def test_copy_design_units_wrong_type_raises(self):
+        s = pl.Series("x", ["a", "b", "c"])
+        with pytest.raises(TypeError, match="DesignUnitType"):
+            s.oe.copy_design_units()
+
+    def test_get_ligands_returns_molecule_series(self):
+        # Create a design unit with a ligand
+        du = oechem.OEDesignUnit()
+        mol = oechem.OEMol()
+        oechem.OEParseSmiles(mol, "CCO")
+        # Note: This is a simplified test - real DUs come from files
+        s = pl.Series("du", [du], dtype=DesignUnitType())
+        result = s.oe.get_ligands()
+        assert result.dtype.ext_name() == "molecule"
+
+    def test_get_proteins_returns_molecule_series(self):
+        du = oechem.OEDesignUnit()
+        s = pl.Series("du", [du], dtype=DesignUnitType())
+        result = s.oe.get_proteins()
+        assert result.dtype.ext_name() == "molecule"
+
+    def test_get_components_returns_molecule_series(self):
+        du = oechem.OEDesignUnit()
+        s = pl.Series("du", [du], dtype=DesignUnitType())
+        result = s.oe.get_components(oechem.OEDesignUnitComponents_Ligand)
+        assert result.dtype.ext_name() == "molecule"
+
+    def test_copy_design_units_creates_independent_copies(self):
+        du = oechem.OEDesignUnit()
+        du.SetTitle("original")
+        s = pl.Series("du", [du], dtype=DesignUnitType())
+        result = s.oe.copy_design_units()
+        # Modify original
+        du.SetTitle("modified")
+        # Verify copy is unaffected
+        assert result[0].GetTitle() == "original"
+
+    def test_copy_design_units_with_nulls(self):
+        du = oechem.OEDesignUnit()
+        s = pl.Series("du", [du, None], dtype=DesignUnitType())
+        result = s.oe.copy_design_units()
+        assert result[0] is not None
+        assert result[1] is None
+
+    def test_get_ligands_wrong_type_raises(self):
+        s = pl.Series("x", ["a", "b", "c"])
+        with pytest.raises(TypeError, match="DesignUnitType"):
+            s.oe.get_ligands()
+
+    def test_get_proteins_wrong_type_raises(self):
+        s = pl.Series("x", ["a", "b", "c"])
+        with pytest.raises(TypeError, match="DesignUnitType"):
+            s.oe.get_proteins()
+
+    def test_get_components_wrong_type_raises(self):
+        s = pl.Series("x", ["a", "b", "c"])
+        with pytest.raises(TypeError, match="DesignUnitType"):
+            s.oe.get_components(oechem.OEDesignUnitComponents_Ligand)
+
+    def test_get_ligands_with_nulls(self):
+        du = oechem.OEDesignUnit()
+        s = pl.Series("du", [du, None], dtype=DesignUnitType())
+        result = s.oe.get_ligands()
+        # Empty DU has no ligand, and null DU also returns null
+        assert result[1] is None
+
+    def test_get_proteins_with_nulls(self):
+        du = oechem.OEDesignUnit()
+        s = pl.Series("du", [du, None], dtype=DesignUnitType())
+        result = s.oe.get_proteins()
+        assert result[1] is None

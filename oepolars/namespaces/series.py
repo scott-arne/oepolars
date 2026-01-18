@@ -4,7 +4,7 @@ import polars as pl
 from openeye import oechem
 
 from oepolars.exceptions import InvalidSMARTS
-from oepolars.types import MoleculeType
+from oepolars.types import DesignUnitType, MoleculeType
 
 
 def _is_molecule_type(dtype: pl.DataType) -> bool:
@@ -201,3 +201,139 @@ class SeriesOENamespace:
 
         copied = [copy_mol(mol) for mol in self._series.to_list()]
         return pl.Series(self._series.name, copied, dtype=MoleculeType())
+
+    def copy_design_units(self) -> pl.Series:
+        """
+        Create deep copies of all design units in the Series.
+
+        Returns
+        -------
+        pl.Series
+            New Series with independent copies of each design unit.
+
+        Raises
+        ------
+        TypeError
+            If the Series is not a DesignUnitType.
+        """
+        if not _is_design_unit_type(self._series.dtype):
+            raise TypeError(
+                f"copy_design_units() requires DesignUnitType, got {self._series.dtype}"
+            )
+
+        def copy_du(du: oechem.OEDesignUnit | None) -> oechem.OEDesignUnit | None:
+            if du is None:
+                return None
+            return oechem.OEDesignUnit(du)
+
+        copied = [copy_du(du) for du in self._series.to_list()]
+        return pl.Series(self._series.name, copied, dtype=DesignUnitType())
+
+    def get_ligands(self, *, clear_titles: bool = False) -> pl.Series:
+        """
+        Extract ligand molecules from design units.
+
+        Parameters
+        ----------
+        clear_titles
+            If True, clear the titles of extracted ligands.
+
+        Returns
+        -------
+        pl.Series
+            MoleculeType Series containing ligand molecules.
+
+        Raises
+        ------
+        TypeError
+            If the Series is not a DesignUnitType.
+        """
+        if not _is_design_unit_type(self._series.dtype):
+            raise TypeError(
+                f"get_ligands() requires DesignUnitType, got {self._series.dtype}"
+            )
+
+        def extract_ligand(du: oechem.OEDesignUnit | None) -> oechem.OEMol | None:
+            if du is None:
+                return None
+            mol = oechem.OEMol()
+            if du.GetLigand(mol):
+                if clear_titles:
+                    mol.SetTitle("")
+                return mol
+            return None
+
+        ligands = [extract_ligand(du) for du in self._series.to_list()]
+        return pl.Series(self._series.name, ligands, dtype=MoleculeType())
+
+    def get_proteins(self, *, clear_titles: bool = False) -> pl.Series:
+        """
+        Extract protein molecules from design units.
+
+        Parameters
+        ----------
+        clear_titles
+            If True, clear the titles of extracted proteins.
+
+        Returns
+        -------
+        pl.Series
+            MoleculeType Series containing protein molecules.
+
+        Raises
+        ------
+        TypeError
+            If the Series is not a DesignUnitType.
+        """
+        if not _is_design_unit_type(self._series.dtype):
+            raise TypeError(
+                f"get_proteins() requires DesignUnitType, got {self._series.dtype}"
+            )
+
+        def extract_protein(du: oechem.OEDesignUnit | None) -> oechem.OEMol | None:
+            if du is None:
+                return None
+            mol = oechem.OEMol()
+            if du.GetProtein(mol):
+                if clear_titles:
+                    mol.SetTitle("")
+                return mol
+            return None
+
+        proteins = [extract_protein(du) for du in self._series.to_list()]
+        return pl.Series(self._series.name, proteins, dtype=MoleculeType())
+
+    def get_components(self, mask: int) -> pl.Series:
+        """
+        Extract components from design units by mask.
+
+        Parameters
+        ----------
+        mask
+            Component mask from oechem.OEDesignUnitComponents_*.
+
+        Returns
+        -------
+        pl.Series
+            MoleculeType Series containing extracted components.
+
+        Raises
+        ------
+        TypeError
+            If the Series is not a DesignUnitType.
+        """
+        if not _is_design_unit_type(self._series.dtype):
+            raise TypeError(
+                f"get_components() requires DesignUnitType, got {self._series.dtype}"
+            )
+
+        def extract_components(du: oechem.OEDesignUnit | None) -> oechem.OEMol | None:
+            if du is None:
+                return None
+            mol = oechem.OEMol()
+            if du.GetComponents(mol, mask):
+                return mol
+            return None
+
+        components = [extract_components(du) for du in self._series.to_list()]
+        return pl.Series(self._series.name, components, dtype=MoleculeType())
