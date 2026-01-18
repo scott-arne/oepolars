@@ -111,3 +111,41 @@ class DataFrameOENamespace:
             result = result.with_columns(new_col)
 
         return result
+
+    def filter_valid(self, columns: str | Iterable[str]) -> pl.DataFrame:
+        """
+        Filter out rows with null molecules in specified columns.
+
+        Parameters
+        ----------
+        columns
+            Column name or list of column names to check for validity.
+
+        Returns
+        -------
+        pl.DataFrame
+            DataFrame with rows containing null molecules removed.
+
+        Raises
+        ------
+        KeyError
+            If a specified column does not exist.
+
+        Examples
+        --------
+        >>> df.oe.filter_valid("Molecule")
+        >>> df.oe.filter_valid(["Molecule", "Ligand"])
+        """
+        columns = [columns] if isinstance(columns, str) else list(columns)
+
+        # Validate columns exist
+        for col in columns:
+            if col not in self._df.columns:
+                raise KeyError(f"Column '{col}' not found in DataFrame")
+
+        # Build filter expression: all specified columns must be not null
+        filter_expr = pl.lit(True)
+        for col in columns:
+            filter_expr = filter_expr & pl.col(col).is_not_null()
+
+        return self._df.filter(filter_expr)

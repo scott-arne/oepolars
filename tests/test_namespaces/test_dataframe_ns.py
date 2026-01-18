@@ -61,3 +61,41 @@ class TestDataFrameAsMolecule:
         df = pl.DataFrame({"mol": pl.Series([mol], dtype=MoleculeType())})
         result = df.oe.as_molecule("mol")
         assert result.schema["mol"].ext_name() == "molecule"
+
+
+class TestDataFrameFilterValid:
+    def test_filter_valid_removes_null_molecules(self):
+        mol = oechem.OEMol()
+        oechem.OEParseSmiles(mol, "CCO")
+        df = pl.DataFrame({
+            "mol": pl.Series([mol, None, mol], dtype=MoleculeType()),
+            "name": ["a", "b", "c"],
+        })
+        result = df.oe.filter_valid("mol")
+        assert len(result) == 2
+
+    def test_filter_valid_multiple_columns(self):
+        mol = oechem.OEMol()
+        oechem.OEParseSmiles(mol, "CCO")
+        df = pl.DataFrame({
+            "mol1": pl.Series([mol, None, mol], dtype=MoleculeType()),
+            "mol2": pl.Series([mol, mol, None], dtype=MoleculeType()),
+        })
+        result = df.oe.filter_valid(["mol1", "mol2"])
+        # Only first row has both valid
+        assert len(result) == 1
+
+    def test_filter_valid_preserves_data(self):
+        mol = oechem.OEMol()
+        oechem.OEParseSmiles(mol, "CCO")
+        df = pl.DataFrame({
+            "mol": pl.Series([mol, None], dtype=MoleculeType()),
+            "name": ["ethanol", "invalid"],
+        })
+        result = df.oe.filter_valid("mol")
+        assert result["name"].to_list() == ["ethanol"]
+
+    def test_filter_valid_column_not_found_raises(self):
+        df = pl.DataFrame({"x": [1, 2, 3]})
+        with pytest.raises(KeyError):
+            df.oe.filter_valid("nonexistent")
