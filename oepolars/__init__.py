@@ -44,6 +44,7 @@ from oepolars.exceptions import (  # noqa: E402
     OEPolarsError,
     UnsupportedFileFormat,
 )
+from oepolars.io import read_sdf  # noqa: E402
 from oepolars.types import DesignUnitType, DisplayType, MoleculeType  # noqa: E402
 
 __all__ = [
@@ -60,4 +61,6 @@ __all__ = [
     "InvalidSMARTS",
     "InvalidMolecule",
     "LazyOperationError",
+    # I/O functions
+    "read_sdf",
 ]

@@ -1,3 +1,5 @@
-"""File I/O operations for OEPolars."""
+"""File I/O functions for OEPolars."""
 
-__all__ = []
+from oepolars.io.readers import read_sdf
+
+__all__ = ["read_sdf"]
