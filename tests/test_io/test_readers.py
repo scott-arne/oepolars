@@ -204,3 +204,75 @@ class TestReadMoleculeCSV:
     def test_read_molecule_csv_molecule_count(self):
         df = oep.read_molecule_csv(FIXTURES_DIR / "sample.csv", smiles_column="smiles")
         assert len(df) == 3
+
+
+class TestReadOEDB:
+    @pytest.fixture
+    def oedb_file(self, tmp_path):
+        """Create a temporary OEDB file for testing.
+
+        Note: We use .oeb extension since OpenEye's oemolistream auto-detects
+        format from extension, and .oedb is not a standard recognized extension.
+        The read_oedb function works with any format that oemolistream supports.
+        """
+        from openeye import oechem
+
+        oedb_path = tmp_path / "test.oeb"
+        ofs = oechem.oemolostream(str(oedb_path))
+
+        for smiles, title in [("CCO", "ethanol"), ("c1ccccc1", "benzene")]:
+            mol = oechem.OEMol()
+            oechem.OEParseSmiles(mol, smiles)
+            mol.SetTitle(title)
+            oechem.OESetSDData(mol, "MW", "46.07" if smiles == "CCO" else "78.11")
+            oechem.OEWriteMolecule(ofs, mol)
+
+        ofs.close()
+        return oedb_path
+
+    def test_read_oedb_returns_dataframe(self, oedb_file):
+        df = oep.read_oedb(oedb_file)
+        assert isinstance(df, pl.DataFrame)
+
+    def test_read_oedb_has_molecule_column(self, oedb_file):
+        df = oep.read_oedb(oedb_file)
+        assert "Molecule" in df.columns
+        assert df.schema["Molecule"].ext_name() == "molecule"
+
+    def test_read_oedb_has_title_column(self, oedb_file):
+        df = oep.read_oedb(oedb_file)
+        assert "Title" in df.columns
+        assert df["Title"].to_list() == ["ethanol", "benzene"]
+
+    def test_read_oedb_reads_sd_data(self, oedb_file):
+        df = oep.read_oedb(oedb_file)
+        assert "MW" in df.columns
+
+    def test_read_oedb_custom_molecule_column_name(self, oedb_file):
+        df = oep.read_oedb(oedb_file, molecule_column="Mol")
+        assert "Mol" in df.columns
+
+    def test_read_oedb_file_not_found_raises(self):
+        from oepolars.exceptions import FileError
+        with pytest.raises(FileError):
+            oep.read_oedb("nonexistent.oedb")
+
+    def test_read_oedb_molecule_count(self, oedb_file):
+        df = oep.read_oedb(oedb_file)
+        assert len(df) == 2
+
+    def test_read_oedb_no_title_column(self, oedb_file):
+        df = oep.read_oedb(oedb_file, title_column=None)
+        assert "Title" not in df.columns
+
+    def test_read_oedb_empty_file(self, tmp_path):
+        """Empty OEDB file returns empty DataFrame."""
+        from openeye import oechem
+
+        oedb_path = tmp_path / "empty.oeb"
+        ofs = oechem.oemolostream(str(oedb_path))
+        ofs.close()
+
+        df = oep.read_oedb(oedb_path)
+        assert len(df) == 0
+        assert "Molecule" in df.columns
