@@ -248,6 +248,81 @@ def read_oeb(
     return df
 
 
+def read_molecule_csv(
+    filepath: FilePath,
+    *,
+    smiles_column: str,
+    molecule_column: str = "Molecule",
+    drop_smiles: bool = True,
+    **csv_kwargs,
+) -> pl.DataFrame:
+    """
+    Read a CSV file and convert a SMILES column to molecules.
+
+    Uses Polars' native CSV reading for efficiency, then converts
+    the specified SMILES column to molecules.
+
+    Parameters
+    ----------
+    filepath
+        Path to the CSV file.
+    smiles_column
+        Name of the column containing SMILES strings.
+    molecule_column
+        Name for the new molecule column.
+    drop_smiles
+        If True (default), remove the original SMILES column.
+    **csv_kwargs
+        Additional arguments passed to pl.read_csv().
+
+    Returns
+    -------
+    pl.DataFrame
+        DataFrame with molecule column and other CSV data.
+
+    Raises
+    ------
+    FileError
+        If the file cannot be read.
+
+    Examples
+    --------
+    >>> df = oep.read_molecule_csv("data.csv", smiles_column="SMILES")
+    """
+    path = Path(filepath)
+    if not path.exists():
+        raise FileError(f"File not found: {filepath}")
+
+    # Read CSV with Polars
+    df = pl.read_csv(path, **csv_kwargs)
+
+    # Parse SMILES strings to molecules
+    smiles_values = df[smiles_column].to_list()
+    molecules = []
+    for smiles in smiles_values:
+        if smiles is None:
+            molecules.append(None)
+        else:
+            mol = oechem.OEMol()
+            if oechem.OEParseSmiles(mol, smiles):
+                molecules.append(mol)
+            else:
+                log.warning("Failed to parse SMILES: %s", smiles)
+                molecules.append(None)
+
+    # Add the molecule column
+    mol_series = pl.Series(molecule_column, molecules, dtype=MoleculeType())
+    df = df.with_columns(mol_series)
+
+    # Optionally drop the SMILES column
+    if drop_smiles and smiles_column in df.columns:
+        df = df.drop(smiles_column)
+
+    log.debug(f"Read {len(df)} rows from {filepath}")
+
+    return df
+
+
 def read_smi(
     filepath: FilePath,
     *,

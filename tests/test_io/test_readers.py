@@ -165,3 +165,42 @@ class TestReadSMI:
         assert len(df) == 0
         assert "Molecule" in df.columns
         os.unlink(f.name)
+
+
+class TestReadMoleculeCSV:
+    def test_read_molecule_csv_returns_dataframe(self):
+        df = oep.read_molecule_csv(FIXTURES_DIR / "sample.csv", smiles_column="smiles")
+        assert isinstance(df, pl.DataFrame)
+
+    def test_read_molecule_csv_has_molecule_column(self):
+        df = oep.read_molecule_csv(FIXTURES_DIR / "sample.csv", smiles_column="smiles")
+        assert "Molecule" in df.columns
+        assert df.schema["Molecule"].ext_name() == "molecule"
+
+    def test_read_molecule_csv_custom_molecule_column_name(self):
+        df = oep.read_molecule_csv(FIXTURES_DIR / "sample.csv", smiles_column="smiles", molecule_column="Mol")
+        assert "Mol" in df.columns
+        assert df.schema["Mol"].ext_name() == "molecule"
+
+    def test_read_molecule_csv_preserves_other_columns(self):
+        df = oep.read_molecule_csv(FIXTURES_DIR / "sample.csv", smiles_column="smiles")
+        assert "name" in df.columns
+        assert "MW" in df.columns
+        assert df["name"].to_list() == ["ethanol", "benzene", "acetic_acid"]
+
+    def test_read_molecule_csv_removes_smiles_column(self):
+        df = oep.read_molecule_csv(FIXTURES_DIR / "sample.csv", smiles_column="smiles")
+        assert "smiles" not in df.columns
+
+    def test_read_molecule_csv_keep_smiles_column(self):
+        df = oep.read_molecule_csv(FIXTURES_DIR / "sample.csv", smiles_column="smiles", drop_smiles=False)
+        assert "smiles" in df.columns
+
+    def test_read_molecule_csv_file_not_found_raises(self):
+        from oepolars.exceptions import FileError
+        with pytest.raises(FileError):
+            oep.read_molecule_csv("nonexistent.csv", smiles_column="smiles")
+
+    def test_read_molecule_csv_molecule_count(self):
+        df = oep.read_molecule_csv(FIXTURES_DIR / "sample.csv", smiles_column="smiles")
+        assert len(df) == 3
