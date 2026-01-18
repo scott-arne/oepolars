@@ -99,3 +99,36 @@ class TestDataFrameFilterValid:
         df = pl.DataFrame({"x": [1, 2, 3]})
         with pytest.raises(KeyError):
             df.oe.filter_valid("nonexistent")
+
+
+class TestDataFrameDetectMoleculeColumns:
+    def test_detect_converts_smiles_columns(self):
+        df = pl.DataFrame({
+            "smiles": ["CCO", "c1ccccc1"],
+            "name": ["ethanol", "benzene"],
+        })
+        result = df.oe.detect_molecule_columns()
+        # SMILES strings should be detected and converted
+        assert result.schema["smiles"].ext_name() == "molecule"
+        assert result.schema["name"] == pl.String
+
+    def test_detect_converts_molecule_object_columns(self):
+        mol1 = oechem.OEMol()
+        oechem.OEParseSmiles(mol1, "CCO")
+        mol2 = oechem.OEMol()
+        oechem.OEParseSmiles(mol2, "c1ccccc1")
+        df = pl.DataFrame({
+            "mol": pl.Series([mol1, mol2], dtype=pl.Object),
+            "name": ["ethanol", "benzene"],
+        })
+        result = df.oe.detect_molecule_columns()
+        assert result.schema["mol"].ext_name() == "molecule"
+
+    def test_detect_leaves_non_molecule_columns(self):
+        df = pl.DataFrame({
+            "x": [1, 2, 3],
+            "y": ["a", "b", "c"],
+        })
+        result = df.oe.detect_molecule_columns()
+        assert result.schema["x"] == pl.Int64
+        assert result.schema["y"] == pl.String
