@@ -44,7 +44,8 @@ def read_sdf(
     usecols
         Specific SD tags to read (None = all).
     numeric_columns
-        SD tag columns to convert to numeric types.
+        SD tag columns to convert to numeric types. Invalid values that cannot
+        be converted to numeric are silently converted to null.
 
     Returns
     -------
@@ -105,6 +106,8 @@ def read_sdf(
                     sd_data_dict[tag].append(None)
 
     ifs.close()
+
+    log.debug(f"Read {len(molecules)} molecules from {filepath}")
 
     # Build DataFrame
     data: dict[str, pl.Series] = {

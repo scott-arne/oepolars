@@ -47,3 +47,8 @@ class TestReadSDF:
     def test_read_sdf_molecule_count(self):
         df = oep.read_sdf(FIXTURES_DIR / "sample.sdf")
         assert len(df) == 2
+
+    def test_read_sdf_empty_file(self):
+        df = oep.read_sdf(FIXTURES_DIR / "empty.sdf")
+        assert len(df) == 0
+        assert "Molecule" in df.columns
