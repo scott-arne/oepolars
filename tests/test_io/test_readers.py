@@ -121,3 +121,47 @@ class TestReadOEB:
     def test_read_oeb_no_title_column(self, oeb_file):
         df = oep.read_oeb(oeb_file, title_column=None)
         assert "Title" not in df.columns
+
+
+class TestReadSMI:
+    def test_read_smi_returns_dataframe(self):
+        df = oep.read_smi(FIXTURES_DIR / "sample.smi")
+        assert isinstance(df, pl.DataFrame)
+
+    def test_read_smi_has_molecule_column(self):
+        df = oep.read_smi(FIXTURES_DIR / "sample.smi")
+        assert "Molecule" in df.columns
+        assert df.schema["Molecule"].ext_name() == "molecule"
+
+    def test_read_smi_has_title_column(self):
+        df = oep.read_smi(FIXTURES_DIR / "sample.smi")
+        assert "Title" in df.columns
+        assert df["Title"].to_list() == ["ethanol", "benzene", "acetic_acid"]
+
+    def test_read_smi_custom_molecule_column_name(self):
+        df = oep.read_smi(FIXTURES_DIR / "sample.smi", molecule_column="Mol")
+        assert "Mol" in df.columns
+        assert df.schema["Mol"].ext_name() == "molecule"
+
+    def test_read_smi_no_title_column(self):
+        df = oep.read_smi(FIXTURES_DIR / "sample.smi", title_column=None)
+        assert "Title" not in df.columns
+
+    def test_read_smi_file_not_found_raises(self):
+        from oepolars.exceptions import FileError
+        with pytest.raises(FileError):
+            oep.read_smi("nonexistent.smi")
+
+    def test_read_smi_molecule_count(self):
+        df = oep.read_smi(FIXTURES_DIR / "sample.smi")
+        assert len(df) == 3
+
+    def test_read_smi_empty_file(self):
+        import tempfile
+        import os
+        with tempfile.NamedTemporaryFile(suffix=".smi", delete=False) as f:
+            pass
+        df = oep.read_smi(f.name)
+        assert len(df) == 0
+        assert "Molecule" in df.columns
+        os.unlink(f.name)
