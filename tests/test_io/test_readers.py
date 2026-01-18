@@ -52,3 +52,72 @@ class TestReadSDF:
         df = oep.read_sdf(FIXTURES_DIR / "empty.sdf")
         assert len(df) == 0
         assert "Molecule" in df.columns
+
+
+class TestReadOEB:
+    @pytest.fixture
+    def oeb_file(self, tmp_path):
+        """Create a temporary OEB file for testing."""
+        from openeye import oechem
+
+        oeb_path = tmp_path / "test.oeb"
+        ofs = oechem.oemolostream(str(oeb_path))
+
+        for smiles, title in [("CCO", "ethanol"), ("c1ccccc1", "benzene")]:
+            mol = oechem.OEMol()
+            oechem.OEParseSmiles(mol, smiles)
+            mol.SetTitle(title)
+            oechem.OESetSDData(mol, "MW", "46.07" if smiles == "CCO" else "78.11")
+            oechem.OEWriteMolecule(ofs, mol)
+
+        ofs.close()
+        return oeb_path
+
+    def test_read_oeb_returns_dataframe(self, oeb_file):
+        df = oep.read_oeb(oeb_file)
+        assert isinstance(df, pl.DataFrame)
+
+    def test_read_oeb_has_molecule_column(self, oeb_file):
+        df = oep.read_oeb(oeb_file)
+        assert "Molecule" in df.columns
+        assert df.schema["Molecule"].ext_name() == "molecule"
+
+    def test_read_oeb_has_title_column(self, oeb_file):
+        df = oep.read_oeb(oeb_file)
+        assert "Title" in df.columns
+        assert df["Title"].to_list() == ["ethanol", "benzene"]
+
+    def test_read_oeb_reads_sd_data(self, oeb_file):
+        df = oep.read_oeb(oeb_file)
+        assert "MW" in df.columns
+
+    def test_read_oeb_custom_molecule_column_name(self, oeb_file):
+        df = oep.read_oeb(oeb_file, molecule_column="Mol")
+        assert "Mol" in df.columns
+        assert df.schema["Mol"].ext_name() == "molecule"
+
+    def test_read_oeb_file_not_found_raises(self):
+        from oepolars.exceptions import FileError
+
+        with pytest.raises(FileError):
+            oep.read_oeb("nonexistent.oeb")
+
+    def test_read_oeb_molecule_count(self, oeb_file):
+        df = oep.read_oeb(oeb_file)
+        assert len(df) == 2
+
+    def test_read_oeb_empty_file(self, tmp_path):
+        """Empty OEB file returns empty DataFrame."""
+        from openeye import oechem
+
+        oeb_path = tmp_path / "empty.oeb"
+        ofs = oechem.oemolostream(str(oeb_path))
+        ofs.close()
+
+        df = oep.read_oeb(oeb_path)
+        assert len(df) == 0
+        assert "Molecule" in df.columns
+
+    def test_read_oeb_no_title_column(self, oeb_file):
+        df = oep.read_oeb(oeb_file, title_column=None)
+        assert "Title" not in df.columns
