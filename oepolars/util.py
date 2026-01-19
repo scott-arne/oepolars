@@ -55,6 +55,63 @@ def is_gz(filepath: str | Path) -> bool:
     return ".gz" in suffixes or ".gzip" in suffixes
 
 
+def mol_to_bytes(mol: oechem.OEMolBase | None) -> bytes | None:
+    """
+    Serialize a molecule to OEB binary format.
+
+    Parameters
+    ----------
+    mol
+        The molecule to serialize, or None.
+
+    Returns
+    -------
+    bytes | None
+        Binary representation of the molecule, or None if mol is None.
+
+    Examples
+    --------
+    >>> mol = oechem.OEMol()
+    >>> oechem.OEParseSmiles(mol, "CCO")
+    >>> data = mol_to_bytes(mol)
+    >>> isinstance(data, bytes)
+    True
+    """
+    if mol is None:
+        return None
+    return oechem.OEWriteMolToBytes(".oeb", mol)
+
+
+def bytes_to_mol(data: bytes | None) -> oechem.OEMol | None:
+    """
+    Deserialize a molecule from OEB binary format.
+
+    Parameters
+    ----------
+    data
+        Binary data in OEB format, or None.
+
+    Returns
+    -------
+    oechem.OEMol | None
+        The deserialized molecule, or None if data is None/empty/invalid.
+
+    Examples
+    --------
+    >>> data = mol_to_bytes(mol)
+    >>> mol2 = bytes_to_mol(data)
+    >>> mol2.GetTitle()
+    'ethanol'
+    """
+    if data is None or len(data) == 0:
+        return None
+
+    mol = oechem.OEMol()
+    if oechem.OEReadMolFromBytes(mol, ".oeb", data):
+        return mol
+    return None
+
+
 def get_oeformat(fmt: str | int, gzip: bool) -> OEFormatInfo:
     """
     Convert a format specification to OEFormat info.
