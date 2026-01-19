@@ -577,6 +577,15 @@ class DataFrameChemNamespace:
             ]
         else:
             mol_cols = list(molecule_columns)
+            # Validate explicitly specified columns exist and are MoleculeType
+            for col in mol_cols:
+                if col not in self._df.columns:
+                    raise KeyError(f"Column not found: {col}")
+                if not _is_molecule_type(self._df.schema[col]):
+                    raise TypeError(
+                        f"Column '{col}' is not MoleculeType, "
+                        f"got {self._df.schema[col]}"
+                    )
 
         # Start with a clone of the DataFrame
         df_out = self._df.clone()

@@ -480,3 +480,16 @@ class TestDataFrameWriteParquet:
         # Test with compression kwarg
         molecule_dataframe.chem.write_parquet(output_path, compression="snappy")
         assert output_path.exists()
+
+    def test_write_parquet_invalid_column_raises(self, molecule_dataframe, tmp_path):
+        """Verify KeyError when non-existent column specified."""
+        output_path = tmp_path / "output.parquet"
+        with pytest.raises(KeyError):
+            molecule_dataframe.chem.write_parquet(output_path, molecule_columns=["nonexistent"])
+
+    def test_write_parquet_wrong_column_type_raises(self, tmp_path):
+        """Verify TypeError when non-MoleculeType column specified."""
+        df = pl.DataFrame({"x": [1, 2, 3]})
+        output_path = tmp_path / "output.parquet"
+        with pytest.raises(TypeError):
+            df.chem.write_parquet(output_path, molecule_columns=["x"])
