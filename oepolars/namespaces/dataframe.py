@@ -18,6 +18,11 @@ def _is_molecule_type(dtype: pl.DataType) -> bool:
     return hasattr(dtype, "ext_name") and dtype.ext_name() == "molecule"
 
 
+def _is_design_unit_type(dtype: pl.DataType) -> bool:
+    """Check if dtype is DesignUnitType."""
+    return hasattr(dtype, "ext_name") and dtype.ext_name() == "design_unit"
+
+
 def _parse_smiles_to_mol(smiles: str | None) -> oechem.OEMol | None:
     """Parse a SMILES string to an OEMol."""
     if smiles is None:
@@ -600,3 +605,134 @@ class DataFrameChemNamespace:
 
         # Write to Parquet
         df_out.write_parquet(str(Path(filepath)), **parquet_kwargs)
+
+    def write_oedb(
+        self,
+        filepath: str | Path,
+        *,
+        molecule_column: str,
+        title_column: str | None = None,
+        sd_columns: Iterable[str] | None = None,
+    ) -> None:
+        """
+        Write molecules to an OEDB (OpenEye database) file.
+
+        Parameters
+        ----------
+        filepath
+            Path to output OEDB file.
+        molecule_column
+            Name of the column containing molecules.
+        title_column
+            Column to use for molecule titles (optional).
+        sd_columns
+            Columns to write as SD data tags (optional).
+
+        Raises
+        ------
+        KeyError
+            If molecule_column does not exist.
+        TypeError
+            If molecule_column is not MoleculeType.
+
+        Examples
+        --------
+        >>> df.chem.write_oedb("output.oedb", molecule_column="Molecule")
+        """
+        if molecule_column not in self._df.columns:
+            raise KeyError(f"Column not found: {molecule_column}")
+
+        if not _is_molecule_type(self._df.schema[molecule_column]):
+            raise TypeError(
+                f"Column '{molecule_column}' is not MoleculeType, "
+                f"got {self._df.schema[molecule_column]}"
+            )
+
+        ofs = oechem.oemolostream()
+        # Set format explicitly to OEB for OEDB files (same binary format)
+        ofs.SetFormat(oechem.OEFormat_OEB)
+        if not ofs.open(str(Path(filepath))):
+            raise IOError(f"Failed to open file for writing: {filepath}")
+
+        try:
+            sd_cols_list = list(sd_columns) if sd_columns else []
+
+            for row_idx in range(len(self._df)):
+                mol = self._df[molecule_column][row_idx]
+                if mol is None:
+                    continue
+
+                mol_copy = oechem.OEMol(mol)
+
+                if title_column and title_column in self._df.columns:
+                    title = self._df[title_column][row_idx]
+                    if title is not None:
+                        mol_copy.SetTitle(str(title))
+
+                for sd_col in sd_cols_list:
+                    if sd_col in self._df.columns:
+                        value = self._df[sd_col][row_idx]
+                        if value is not None:
+                            oechem.OESetSDData(mol_copy, sd_col, str(value))
+
+                oechem.OEWriteMolecule(ofs, mol_copy)
+        finally:
+            ofs.close()
+
+    def write_oedu(
+        self,
+        filepath: str | Path,
+        *,
+        design_unit_column: str,
+        title_column: str | None = None,
+    ) -> None:
+        """
+        Write design units to an OEDU file.
+
+        Parameters
+        ----------
+        filepath
+            Path to output OEDU file.
+        design_unit_column
+            Name of the column containing design units.
+        title_column
+            Column to use for design unit titles (optional).
+
+        Raises
+        ------
+        KeyError
+            If design_unit_column does not exist.
+        TypeError
+            If design_unit_column is not DesignUnitType.
+
+        Examples
+        --------
+        >>> df.chem.write_oedu("output.oedu", design_unit_column="DesignUnit")
+        """
+        if design_unit_column not in self._df.columns:
+            raise KeyError(f"Column not found: {design_unit_column}")
+
+        if not _is_design_unit_type(self._df.schema[design_unit_column]):
+            raise TypeError(
+                f"Column '{design_unit_column}' is not DesignUnitType, "
+                f"got {self._df.schema[design_unit_column]}"
+            )
+
+        ofs = oechem.oeofstream(str(Path(filepath)))
+
+        try:
+            for row_idx in range(len(self._df)):
+                du = self._df[design_unit_column][row_idx]
+                if du is None:
+                    continue
+
+                du_copy = oechem.OEDesignUnit(du)
+
+                if title_column and title_column in self._df.columns:
+                    title = self._df[title_column][row_idx]
+                    if title is not None:
+                        du_copy.SetTitle(str(title))
+
+                oechem.OEWriteDesignUnit(ofs, du_copy)
+        finally:
+            ofs.close()

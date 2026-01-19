@@ -443,7 +443,11 @@ def read_oedb(
     titles = []
     sd_data_dict: dict[str, list] = {}
 
-    ifs = oechem.oemolistream(str(path))
+    ifs = oechem.oemolistream()
+    # Set format explicitly to OEB for OEDB files (same binary format)
+    ifs.SetFormat(oechem.OEFormat_OEB)
+    if not ifs.open(str(path)):
+        raise FileError(f"Failed to open file: {filepath}")
 
     mol = oechem.OEGraphMol()
     while oechem.OEReadMolecule(ifs, mol):

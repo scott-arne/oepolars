@@ -493,3 +493,130 @@ class TestDataFrameWriteParquet:
         output_path = tmp_path / "output.parquet"
         with pytest.raises(TypeError):
             df.chem.write_parquet(output_path, molecule_columns=["x"])
+
+
+class TestDataFrameWriteOEDB:
+    @pytest.fixture
+    def molecule_dataframe(self):
+        mols = []
+        for smiles in ["CCO", "c1ccccc1"]:
+            mol = oechem.OEMol()
+            oechem.OEParseSmiles(mol, smiles)
+            mols.append(mol)
+        return pl.DataFrame({
+            "Molecule": pl.Series(mols, dtype=MoleculeType()),
+            "name": ["ethanol", "benzene"],
+            "MW": [46.07, 78.11],
+        })
+
+    def test_write_oedb_creates_file(self, molecule_dataframe, tmp_path):
+        """Verify that write_oedb creates a file."""
+        output_path = tmp_path / "output.oedb"
+        molecule_dataframe.chem.write_oedb(output_path, molecule_column="Molecule")
+        assert output_path.exists()
+
+    def test_write_oedb_readable(self, molecule_dataframe, tmp_path):
+        """Verify OEDB file can be read back."""
+        output_path = tmp_path / "output.oedb"
+        molecule_dataframe.chem.write_oedb(output_path, molecule_column="Molecule")
+
+        import oepolars as oep
+        df_back = oep.read_oedb(output_path)
+        assert len(df_back) == 2
+
+    def test_write_oedb_with_sd_data(self, molecule_dataframe, tmp_path):
+        """Verify SD data columns are written."""
+        output_path = tmp_path / "output.oedb"
+        molecule_dataframe.chem.write_oedb(
+            output_path,
+            molecule_column="Molecule",
+            sd_columns=["name", "MW"]
+        )
+
+        import oepolars as oep
+        df_back = oep.read_oedb(output_path)
+        assert "name" in df_back.columns
+        assert "MW" in df_back.columns
+
+    def test_write_oedb_with_title_column(self, molecule_dataframe, tmp_path):
+        """Verify title column is written."""
+        output_path = tmp_path / "output.oedb"
+        molecule_dataframe.chem.write_oedb(
+            output_path,
+            molecule_column="Molecule",
+            title_column="name"
+        )
+
+        import oepolars as oep
+        df_back = oep.read_oedb(output_path)
+        assert df_back["Title"].to_list() == ["ethanol", "benzene"]
+
+    def test_write_oedb_invalid_column_raises(self, molecule_dataframe, tmp_path):
+        """Verify KeyError for nonexistent column."""
+        output_path = tmp_path / "output.oedb"
+        with pytest.raises(KeyError):
+            molecule_dataframe.chem.write_oedb(output_path, molecule_column="nonexistent")
+
+    def test_write_oedb_wrong_column_type_raises(self, tmp_path):
+        """Verify TypeError for wrong column type."""
+        df = pl.DataFrame({"x": [1, 2, 3]})
+        output_path = tmp_path / "output.oedb"
+        with pytest.raises(TypeError):
+            df.chem.write_oedb(output_path, molecule_column="x")
+
+
+class TestDataFrameWriteOEDU:
+    @pytest.fixture
+    def design_unit_dataframe(self):
+        from oepolars.types import DesignUnitType
+        # Create simple design units
+        dus = []
+        for title in ["complex1", "complex2"]:
+            du = oechem.OEDesignUnit()
+            du.SetTitle(title)
+            dus.append(du)
+        return pl.DataFrame({
+            "DesignUnit": pl.Series(dus, dtype=DesignUnitType()),
+            "name": ["complex1", "complex2"],
+        })
+
+    def test_write_oedu_creates_file(self, design_unit_dataframe, tmp_path):
+        """Verify that write_oedu creates a file."""
+        output_path = tmp_path / "output.oedu"
+        design_unit_dataframe.chem.write_oedu(output_path, design_unit_column="DesignUnit")
+        assert output_path.exists()
+
+    def test_write_oedu_readable(self, design_unit_dataframe, tmp_path):
+        """Verify OEDU file can be read back."""
+        output_path = tmp_path / "output.oedu"
+        design_unit_dataframe.chem.write_oedu(output_path, design_unit_column="DesignUnit")
+
+        import oepolars as oep
+        df_back = oep.read_oedu(output_path)
+        assert len(df_back) == 2
+
+    def test_write_oedu_with_title_column(self, design_unit_dataframe, tmp_path):
+        """Verify title column is written."""
+        output_path = tmp_path / "output.oedu"
+        design_unit_dataframe.chem.write_oedu(
+            output_path,
+            design_unit_column="DesignUnit",
+            title_column="name"
+        )
+
+        import oepolars as oep
+        df_back = oep.read_oedu(output_path)
+        assert df_back["Title"].to_list() == ["complex1", "complex2"]
+
+    def test_write_oedu_invalid_column_raises(self, design_unit_dataframe, tmp_path):
+        """Verify KeyError for nonexistent column."""
+        output_path = tmp_path / "output.oedu"
+        with pytest.raises(KeyError):
+            design_unit_dataframe.chem.write_oedu(output_path, design_unit_column="nonexistent")
+
+    def test_write_oedu_wrong_column_type_raises(self, tmp_path):
+        """Verify TypeError for wrong column type."""
+        df = pl.DataFrame({"x": [1, 2, 3]})
+        output_path = tmp_path / "output.oedu"
+        with pytest.raises(TypeError):
+            df.chem.write_oedu(output_path, design_unit_column="x")
