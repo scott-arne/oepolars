@@ -5,7 +5,7 @@ from pathlib import Path
 
 import polars as pl
 
-from oepolars.io.readers import read_sdf
+from oepolars.io.readers import read_oeb, read_sdf, read_smi
 
 # Type alias for file paths
 FilePath = str | Path
@@ -67,5 +67,105 @@ def scan_sdf(
         sd_data=sd_data,
         usecols=usecols,
         numeric_columns=numeric_columns,
+    )
+    return df.lazy()
+
+
+def scan_oeb(
+    filepath: FilePath,
+    *,
+    molecule_column: str = "Molecule",
+    title_column: str | None = "Title",
+    sd_data: bool = True,
+    usecols: Iterable[str] | None = None,
+    numeric_columns: Iterable[str] | None = None,
+) -> pl.LazyFrame:
+    """
+    Lazily read molecules from an OEB file.
+
+    Returns a LazyFrame for query optimization. Molecules are read eagerly
+    but downstream operations (select, filter, etc.) are optimized lazily.
+
+    Parameters
+    ----------
+    filepath
+        Path to the OEB file.
+    molecule_column
+        Name for the molecule column.
+    title_column
+        Name for the title column, or None to skip.
+    sd_data
+        Whether to read SD data tags as columns.
+    usecols
+        Specific SD tags to read (None = all).
+    numeric_columns
+        SD tag columns to convert to numeric types.
+
+    Returns
+    -------
+    pl.LazyFrame
+        LazyFrame with molecule column and optional SD data.
+
+    Raises
+    ------
+    FileError
+        If the file cannot be read.
+
+    Examples
+    --------
+    >>> lf = oep.scan_oeb("molecules.oeb")
+    >>> df = lf.collect()
+    """
+    df = read_oeb(
+        filepath,
+        molecule_column=molecule_column,
+        title_column=title_column,
+        sd_data=sd_data,
+        usecols=usecols,
+        numeric_columns=numeric_columns,
+    )
+    return df.lazy()
+
+
+def scan_smi(
+    filepath: FilePath,
+    *,
+    molecule_column: str = "Molecule",
+    title_column: str | None = "Title",
+) -> pl.LazyFrame:
+    """
+    Lazily read molecules from a SMILES file.
+
+    Returns a LazyFrame for query optimization. Molecules are read eagerly
+    but downstream operations (select, filter, etc.) are optimized lazily.
+
+    Parameters
+    ----------
+    filepath
+        Path to the SMILES file.
+    molecule_column
+        Name for the molecule column.
+    title_column
+        Name for the title column, or None to skip.
+
+    Returns
+    -------
+    pl.LazyFrame
+        LazyFrame with molecule column and optional title.
+
+    Raises
+    ------
+    FileError
+        If the file cannot be read.
+
+    Examples
+    --------
+    >>> lf = oep.scan_smi("molecules.smi")
+    >>> df = lf.collect()
+    """
+    df = read_smi(
+        filepath,
+        molecule_column=molecule_column,
+        title_column=title_column,
     )
     return df.lazy()
