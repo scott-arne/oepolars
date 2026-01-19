@@ -5,6 +5,7 @@ from oepolars.io.readers import (
     read_oeb,
     read_oedb,
     read_oedu,
+    read_parquet,
     read_sdf,
     read_smi,
 )
@@ -15,6 +16,7 @@ __all__ = [
     "read_oeb",
     "read_oedb",
     "read_oedu",
+    "read_parquet",
     "read_sdf",
     "read_smi",
     "scan_oeb",

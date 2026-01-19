@@ -9,6 +9,7 @@ from openeye import oechem
 
 from oepolars.exceptions import FileError
 from oepolars.types import DesignUnitType, MoleculeType
+from oepolars.util import bytes_to_mol
 
 log = logging.getLogger("oepolars")
 
@@ -560,3 +561,89 @@ def read_oedu(
         data[title_column] = pl.Series(titles, dtype=pl.String)
 
     return pl.DataFrame(data)
+
+
+def read_parquet(
+    filepath: FilePath,
+    *,
+    molecule_columns: Iterable[str] | None = None,
+    **parquet_kwargs,
+) -> pl.DataFrame:
+    """
+    Read a Parquet file and reconstruct molecule columns from serialized binary data.
+
+    This function reads Parquet files that were written with
+    `df.chem.write_parquet()`, which serializes MoleculeType columns
+    to binary OEB format. This function converts those binary columns
+    back to MoleculeType.
+
+    Parameters
+    ----------
+    filepath
+        Path to the Parquet file.
+    molecule_columns
+        Column names containing serialized molecule data (Binary type).
+        This parameter is required because we cannot auto-detect which
+        Binary columns were originally molecules.
+    **parquet_kwargs
+        Additional arguments passed to pl.read_parquet().
+
+    Returns
+    -------
+    pl.DataFrame
+        DataFrame with specified binary columns converted to MoleculeType.
+
+    Raises
+    ------
+    ValueError
+        If molecule_columns is not specified (None).
+    FileError
+        If the file cannot be read.
+
+    Examples
+    --------
+    >>> # Write molecules to Parquet
+    >>> df.chem.write_parquet("molecules.parquet")
+    >>> # Read them back
+    >>> df_back = oep.read_parquet("molecules.parquet", molecule_columns=["Molecule"])
+    >>> df_back.schema["Molecule"].ext_name()
+    'molecule'
+    """
+    if molecule_columns is None:
+        raise ValueError(
+            "molecule_columns must be specified. Cannot auto-detect which "
+            "Binary columns were originally molecules. Pass an empty list "
+            "if no columns should be converted."
+        )
+
+    path = Path(filepath)
+    if not path.exists():
+        raise FileError(f"File not found: {filepath}")
+
+    # Read the Parquet file
+    df = pl.read_parquet(path, **parquet_kwargs)
+
+    # Convert molecule_columns to list
+    mol_cols = list(molecule_columns)
+
+    # If empty list, just return the DataFrame as-is
+    if not mol_cols:
+        return df
+
+    # Reconstruct each molecule column
+    for col in mol_cols:
+        if col not in df.columns:
+            raise KeyError(f"Column not found: {col}")
+
+        # Get the binary data and convert to molecules
+        binary_values = df[col].to_list()
+        molecules = [bytes_to_mol(data) for data in binary_values]
+
+        # Replace the column with MoleculeType
+        df = df.with_columns(
+            pl.Series(col, molecules, dtype=MoleculeType())
+        )
+
+    log.debug(f"Read {len(df)} rows from {filepath}")
+
+    return df

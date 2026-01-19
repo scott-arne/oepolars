@@ -342,3 +342,161 @@ class TestReadOEDU:
         df = oep.read_oedu(oedu_path)
         assert len(df) == 0
         assert "DesignUnit" in df.columns
+
+
+class TestReadParquet:
+    """Tests for read_parquet function that reconstructs molecules from binary."""
+
+    @pytest.fixture
+    def molecule_dataframe(self):
+        """Create a DataFrame with molecule columns for testing."""
+        from openeye import oechem
+        from oepolars import MoleculeType
+
+        mols = []
+        for smiles in ["CCO", "c1ccccc1"]:
+            mol = oechem.OEMol()
+            oechem.OEParseSmiles(mol, smiles)
+            mols.append(mol)
+        return pl.DataFrame({
+            "Molecule": pl.Series(mols, dtype=MoleculeType()),
+            "name": ["ethanol", "benzene"],
+            "MW": [46.07, 78.11],
+        })
+
+    def test_read_parquet_reconstructs_molecules(self, molecule_dataframe, tmp_path):
+        """Test roundtrip: write then read back reconstructs molecules."""
+        from openeye import oechem
+
+        parquet_path = tmp_path / "test.parquet"
+        molecule_dataframe.chem.write_parquet(parquet_path)
+
+        # Read back with molecule_columns specified
+        df_back = oep.read_parquet(parquet_path, molecule_columns=["Molecule"])
+
+        # Check that the Molecule column is MoleculeType
+        assert df_back.schema["Molecule"].ext_name() == "molecule"
+
+        # Check that we can access the molecules
+        mol = df_back["Molecule"][0]
+        assert mol is not None
+        assert isinstance(mol, oechem.OEMolBase)
+        assert mol.NumAtoms() > 0
+
+    def test_read_parquet_preserves_other_columns(self, molecule_dataframe, tmp_path):
+        """Test that non-molecule columns are unchanged."""
+        parquet_path = tmp_path / "test.parquet"
+        molecule_dataframe.chem.write_parquet(parquet_path)
+
+        df_back = oep.read_parquet(parquet_path, molecule_columns=["Molecule"])
+
+        # Verify non-molecule columns preserved
+        assert df_back["name"].to_list() == ["ethanol", "benzene"]
+        assert df_back["MW"].to_list() == [46.07, 78.11]
+
+    def test_read_parquet_handles_nulls(self, tmp_path):
+        """Test that null bytes become null molecules."""
+        from openeye import oechem
+        from oepolars import MoleculeType
+
+        mol = oechem.OEMol()
+        oechem.OEParseSmiles(mol, "CCO")
+        df = pl.DataFrame({
+            "Molecule": pl.Series([mol, None], dtype=MoleculeType()),
+            "name": ["ethanol", "none"],
+        })
+
+        parquet_path = tmp_path / "test.parquet"
+        df.chem.write_parquet(parquet_path)
+
+        df_back = oep.read_parquet(parquet_path, molecule_columns=["Molecule"])
+
+        # First molecule should be reconstructed
+        assert df_back["Molecule"][0] is not None
+        # Second molecule should be null
+        assert df_back["Molecule"][1] is None
+
+    def test_read_parquet_with_multiple_molecule_columns(self, tmp_path):
+        """Test that multiple molecule columns work correctly."""
+        from openeye import oechem
+        from oepolars import MoleculeType
+
+        mol1 = oechem.OEMol()
+        oechem.OEParseSmiles(mol1, "CCO")
+        mol2 = oechem.OEMol()
+        oechem.OEParseSmiles(mol2, "c1ccccc1")
+
+        df = pl.DataFrame({
+            "Mol1": pl.Series([mol1, mol2], dtype=MoleculeType()),
+            "Mol2": pl.Series([mol2, mol1], dtype=MoleculeType()),
+            "name": ["a", "b"],
+        })
+
+        parquet_path = tmp_path / "test.parquet"
+        df.chem.write_parquet(parquet_path)
+
+        df_back = oep.read_parquet(parquet_path, molecule_columns=["Mol1", "Mol2"])
+
+        # Both columns should be MoleculeType
+        assert df_back.schema["Mol1"].ext_name() == "molecule"
+        assert df_back.schema["Mol2"].ext_name() == "molecule"
+
+        # Molecules should be accessible
+        assert df_back["Mol1"][0] is not None
+        assert df_back["Mol2"][0] is not None
+
+    def test_read_parquet_passes_kwargs(self, molecule_dataframe, tmp_path):
+        """Test that kwargs are passed through to pl.read_parquet."""
+        parquet_path = tmp_path / "test.parquet"
+        molecule_dataframe.chem.write_parquet(parquet_path)
+
+        # Test with columns kwarg to read only specific columns
+        df_back = oep.read_parquet(
+            parquet_path,
+            molecule_columns=["Molecule"],
+            columns=["Molecule", "name"],  # Exclude MW column
+        )
+
+        assert "Molecule" in df_back.columns
+        assert "name" in df_back.columns
+        assert "MW" not in df_back.columns
+
+    def test_read_parquet_requires_molecule_columns(self, molecule_dataframe, tmp_path):
+        """Test that molecule_columns parameter is required."""
+        parquet_path = tmp_path / "test.parquet"
+        molecule_dataframe.chem.write_parquet(parquet_path)
+
+        # Without molecule_columns, should raise an error
+        with pytest.raises(ValueError):
+            oep.read_parquet(parquet_path)
+
+    def test_read_parquet_empty_molecule_columns(self, molecule_dataframe, tmp_path):
+        """Test with empty molecule_columns list reads as regular parquet."""
+        parquet_path = tmp_path / "test.parquet"
+        molecule_dataframe.chem.write_parquet(parquet_path)
+
+        # With empty molecule_columns, should read but Molecule stays Binary
+        df_back = oep.read_parquet(parquet_path, molecule_columns=[])
+
+        # Molecule should still be Binary (not converted)
+        assert df_back.schema["Molecule"] == pl.Binary
+
+    def test_read_parquet_file_not_found_raises(self):
+        from oepolars.exceptions import FileError
+        with pytest.raises(FileError):
+            oep.read_parquet("nonexistent.parquet", molecule_columns=["Molecule"])
+
+    def test_read_parquet_invalid_column_raises(self, molecule_dataframe, tmp_path):
+        parquet_path = tmp_path / "test.parquet"
+        molecule_dataframe.chem.write_parquet(parquet_path)
+        with pytest.raises(KeyError, match="NonExistent"):
+            oep.read_parquet(parquet_path, molecule_columns=["NonExistent"])
+
+    def test_read_parquet_empty_file(self, tmp_path):
+        # Create empty DataFrame with molecule column
+        from oepolars import MoleculeType
+        df = pl.DataFrame({"Molecule": pl.Series([], dtype=MoleculeType())})
+        parquet_path = tmp_path / "empty.parquet"
+        df.chem.write_parquet(parquet_path)
+        result = oep.read_parquet(parquet_path, molecule_columns=["Molecule"])
+        assert len(result) == 0
