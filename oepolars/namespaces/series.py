@@ -17,12 +17,12 @@ def _is_design_unit_type(dtype: pl.DataType) -> bool:
     return hasattr(dtype, "ext_name") and dtype.ext_name() == "design_unit"
 
 
-@pl.api.register_series_namespace("oe")
-class SeriesOENamespace:
+@pl.api.register_series_namespace("chem")
+class SeriesChemNamespace:
     """
-    Namespace for OpenEye operations on Polars Series.
+    Namespace for OpenEye chemistry operations on Polars Series.
 
-    Accessed via `series.oe.*`.
+    Accessed via `series.chem.*`.
     """
 
     def __init__(self, series: pl.Series) -> None:
@@ -44,7 +44,7 @@ class SeriesOENamespace:
 
         Examples
         --------
-        >>> s.oe.is_valid()
+        >>> s.chem.is_valid()
         shape: (3,)
         Series: 'mol' [bool]
         [
@@ -83,7 +83,7 @@ class SeriesOENamespace:
 
         Examples
         --------
-        >>> s.oe.to_smiles()
+        >>> s.chem.to_smiles()
         shape: (3,)
         Series: 'mol' [str]
         [
@@ -137,7 +137,7 @@ class SeriesOENamespace:
 
         Examples
         --------
-        >>> s.oe.subsearch("c1ccccc1")  # Find molecules with benzene ring
+        >>> s.chem.subsearch("c1ccccc1")  # Find molecules with benzene ring
         shape: (4,)
         Series: 'mol' [bool]
         [
@@ -186,7 +186,7 @@ class SeriesOENamespace:
 
         Examples
         --------
-        >>> copied = s.oe.copy_molecules()
+        >>> copied = s.chem.copy_molecules()
         >>> # Modifying original doesn't affect copy
         """
         if not _is_molecule_type(self._series.dtype):

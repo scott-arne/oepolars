@@ -8,7 +8,7 @@ import polars as pl
 from openeye import oechem
 
 from oepolars.exceptions import FileError
-from oepolars.types import MoleculeType
+from oepolars.types import DesignUnitType, MoleculeType
 
 log = logging.getLogger("oepolars")
 
@@ -498,3 +498,65 @@ def read_oedb(
                 )
 
     return df
+
+
+def read_oedu(
+    filepath: FilePath,
+    *,
+    design_unit_column: str = "DesignUnit",
+    title_column: str | None = "Title",
+) -> pl.DataFrame:
+    """
+    Read design units from an OEDU file into a DataFrame.
+
+    OEDU files contain OpenEye design units (protein-ligand complexes).
+
+    Parameters
+    ----------
+    filepath
+        Path to the OEDU file.
+    design_unit_column
+        Name for the design unit column.
+    title_column
+        Name for the title column, or None to skip.
+
+    Returns
+    -------
+    pl.DataFrame
+        DataFrame with design unit column and optional title.
+
+    Raises
+    ------
+    FileError
+        If the file cannot be read.
+
+    Examples
+    --------
+    >>> df = oep.read_oedu("complexes.oedu")
+    """
+    path = Path(filepath)
+    if not path.exists():
+        raise FileError(f"File not found: {filepath}")
+
+    design_units = []
+    titles = []
+
+    ifs = oechem.oeifstream(str(path))
+
+    du = oechem.OEDesignUnit()
+    while oechem.OEReadDesignUnit(ifs, du):
+        design_units.append(oechem.OEDesignUnit(du))
+        titles.append(du.GetTitle())
+
+    ifs.close()
+
+    log.debug(f"Read {len(design_units)} design units from {filepath}")
+
+    data: dict[str, pl.Series] = {
+        design_unit_column: pl.Series(design_units, dtype=DesignUnitType()),
+    }
+
+    if title_column is not None:
+        data[title_column] = pl.Series(titles, dtype=pl.String)
+
+    return pl.DataFrame(data)

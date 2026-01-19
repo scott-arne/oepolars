@@ -276,3 +276,69 @@ class TestReadOEDB:
         df = oep.read_oedb(oedb_path)
         assert len(df) == 0
         assert "Molecule" in df.columns
+
+
+class TestReadOEDU:
+    @pytest.fixture
+    def oedu_file(self, tmp_path):
+        """Create a temporary OEDU file for testing."""
+        from openeye import oechem
+
+        oedu_path = tmp_path / "test.oedu"
+        ofs = oechem.oeofstream(str(oedu_path))
+
+        # Create a simple design unit
+        du = oechem.OEDesignUnit()
+        du.SetTitle("test_du")
+        oechem.OEWriteDesignUnit(ofs, du)
+
+        du2 = oechem.OEDesignUnit()
+        du2.SetTitle("test_du_2")
+        oechem.OEWriteDesignUnit(ofs, du2)
+
+        ofs.close()
+        return oedu_path
+
+    def test_read_oedu_returns_dataframe(self, oedu_file):
+        df = oep.read_oedu(oedu_file)
+        assert isinstance(df, pl.DataFrame)
+
+    def test_read_oedu_has_design_unit_column(self, oedu_file):
+        df = oep.read_oedu(oedu_file)
+        assert "DesignUnit" in df.columns
+        assert df.schema["DesignUnit"].ext_name() == "design_unit"
+
+    def test_read_oedu_has_title_column(self, oedu_file):
+        df = oep.read_oedu(oedu_file)
+        assert "Title" in df.columns
+        assert df["Title"].to_list() == ["test_du", "test_du_2"]
+
+    def test_read_oedu_custom_du_column_name(self, oedu_file):
+        df = oep.read_oedu(oedu_file, design_unit_column="DU")
+        assert "DU" in df.columns
+        assert df.schema["DU"].ext_name() == "design_unit"
+
+    def test_read_oedu_no_title_column(self, oedu_file):
+        df = oep.read_oedu(oedu_file, title_column=None)
+        assert "Title" not in df.columns
+
+    def test_read_oedu_file_not_found_raises(self):
+        from oepolars.exceptions import FileError
+        with pytest.raises(FileError):
+            oep.read_oedu("nonexistent.oedu")
+
+    def test_read_oedu_design_unit_count(self, oedu_file):
+        df = oep.read_oedu(oedu_file)
+        assert len(df) == 2
+
+    def test_read_oedu_empty_file(self, tmp_path):
+        """Empty OEDU file returns empty DataFrame."""
+        from openeye import oechem
+
+        oedu_path = tmp_path / "empty.oedu"
+        ofs = oechem.oeofstream(str(oedu_path))
+        ofs.close()
+
+        df = oep.read_oedu(oedu_path)
+        assert len(df) == 0
+        assert "DesignUnit" in df.columns

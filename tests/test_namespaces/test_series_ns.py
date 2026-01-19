@@ -9,15 +9,15 @@ from oepolars.exceptions import InvalidSMARTS
 
 
 class TestSeriesNamespaceRegistration:
-    def test_oe_namespace_exists_on_series(self):
+    def test_chem_namespace_exists_on_series(self):
         s = pl.Series("x", [1, 2, 3])
-        assert hasattr(s, "oe")
+        assert hasattr(s, "chem")
 
-    def test_oe_namespace_accessible(self):
+    def test_chem_namespace_accessible(self):
         mol = oechem.OEMol()
         oechem.OEParseSmiles(mol, "CCO")
         s = pl.Series("mol", [mol], dtype=MoleculeType())
-        ns = s.oe
+        ns = s.chem
         assert ns is not None
 
 
@@ -33,15 +33,15 @@ class TestSeriesIsValid:
         return pl.Series("mol", data, dtype=MoleculeType())
 
     def test_is_valid_returns_series(self, molecule_series_with_nulls):
-        result = molecule_series_with_nulls.oe.is_valid()
+        result = molecule_series_with_nulls.chem.is_valid()
         assert isinstance(result, pl.Series)
 
     def test_is_valid_dtype_is_bool(self, molecule_series_with_nulls):
-        result = molecule_series_with_nulls.oe.is_valid()
+        result = molecule_series_with_nulls.chem.is_valid()
         assert result.dtype == pl.Boolean
 
     def test_is_valid_detects_nulls(self, molecule_series_with_nulls):
-        result = molecule_series_with_nulls.oe.is_valid()
+        result = molecule_series_with_nulls.chem.is_valid()
         expected = [True, False, True]
         assert result.to_list() == expected
 
@@ -49,29 +49,29 @@ class TestSeriesIsValid:
         mol = oechem.OEMol()
         oechem.OEParseSmiles(mol, "CCO")
         s = pl.Series("mol", [mol, mol], dtype=MoleculeType())
-        result = s.oe.is_valid()
+        result = s.chem.is_valid()
         assert result.to_list() == [True, True]
 
     def test_is_valid_wrong_type_raises(self):
         s = pl.Series("x", ["a", "b", "c"])
         with pytest.raises(TypeError, match="MoleculeType or DesignUnitType"):
-            s.oe.is_valid()
+            s.chem.is_valid()
 
     def test_is_valid_empty_series(self):
         s = pl.Series("mol", [], dtype=MoleculeType())
-        result = s.oe.is_valid()
+        result = s.chem.is_valid()
         assert result.to_list() == []
 
     def test_is_valid_all_nulls(self):
         s = pl.Series("mol", [None, None], dtype=MoleculeType())
-        result = s.oe.is_valid()
+        result = s.chem.is_valid()
         assert result.to_list() == [False, False]
 
     def test_is_valid_with_design_unit_type(self):
         from oepolars import DesignUnitType
         du = oechem.OEDesignUnit()
         s = pl.Series("du", [du, None], dtype=DesignUnitType())
-        result = s.oe.is_valid()
+        result = s.chem.is_valid()
         assert result.to_list() == [True, False]
 
 
@@ -86,15 +86,15 @@ class TestSeriesToSmiles:
         return pl.Series("mol", mols, dtype=MoleculeType())
 
     def test_to_smiles_returns_series(self, molecule_series):
-        result = molecule_series.oe.to_smiles()
+        result = molecule_series.chem.to_smiles()
         assert isinstance(result, pl.Series)
 
     def test_to_smiles_dtype_is_string(self, molecule_series):
-        result = molecule_series.oe.to_smiles()
+        result = molecule_series.chem.to_smiles()
         assert result.dtype == pl.String
 
     def test_to_smiles_generates_valid_smiles(self, molecule_series):
-        result = molecule_series.oe.to_smiles()
+        result = molecule_series.chem.to_smiles()
         # Check that we can parse the generated SMILES back
         for smi in result.to_list():
             mol = oechem.OEMol()
@@ -104,19 +104,19 @@ class TestSeriesToSmiles:
         mol = oechem.OEMol()
         oechem.OEParseSmiles(mol, "CCO")
         s = pl.Series("mol", [mol, None], dtype=MoleculeType())
-        result = s.oe.to_smiles()
+        result = s.chem.to_smiles()
         assert result[0] is not None
         assert result[1] is None
 
     def test_to_smiles_with_flavor(self, molecule_series):
         # Test with isomeric flag
-        result = molecule_series.oe.to_smiles(flavor=oechem.OESMILESFlag_Canonical)
+        result = molecule_series.chem.to_smiles(flavor=oechem.OESMILESFlag_Canonical)
         assert isinstance(result, pl.Series)
 
     def test_to_smiles_wrong_type_raises(self):
         s = pl.Series("x", ["a", "b", "c"])
         with pytest.raises(TypeError, match="MoleculeType"):
-            s.oe.to_smiles()
+            s.chem.to_smiles()
 
 
 class TestSeriesSubsearch:
@@ -131,28 +131,28 @@ class TestSeriesSubsearch:
         return pl.Series("mol", mols, dtype=MoleculeType())
 
     def test_subsearch_returns_series(self, molecule_series):
-        result = molecule_series.oe.subsearch("c1ccccc1")
+        result = molecule_series.chem.subsearch("c1ccccc1")
         assert isinstance(result, pl.Series)
 
     def test_subsearch_dtype_is_bool(self, molecule_series):
-        result = molecule_series.oe.subsearch("c1ccccc1")
+        result = molecule_series.chem.subsearch("c1ccccc1")
         assert result.dtype == pl.Boolean
 
     def test_subsearch_finds_benzene_ring(self, molecule_series):
-        result = molecule_series.oe.subsearch("c1ccccc1")
+        result = molecule_series.chem.subsearch("c1ccccc1")
         # benzene and phenol have benzene rings
         expected = [False, True, False, True]
         assert result.to_list() == expected
 
     def test_subsearch_finds_hydroxyl(self, molecule_series):
-        result = molecule_series.oe.subsearch("[OH]")
+        result = molecule_series.chem.subsearch("[OH]")
         # ethanol, acetic acid (carboxylic OH), and phenol have hydroxyl
         expected = [True, False, True, True]
         assert result.to_list() == expected
 
     def test_subsearch_with_oesub_search_object(self, molecule_series):
         ss = oechem.OESubSearch("c1ccccc1")
-        result = molecule_series.oe.subsearch(ss)
+        result = molecule_series.chem.subsearch(ss)
         expected = [False, True, False, True]
         assert result.to_list() == expected
 
@@ -160,17 +160,17 @@ class TestSeriesSubsearch:
         mol = oechem.OEMol()
         oechem.OEParseSmiles(mol, "c1ccccc1")
         s = pl.Series("mol", [mol, None], dtype=MoleculeType())
-        result = s.oe.subsearch("c1ccccc1")
+        result = s.chem.subsearch("c1ccccc1")
         assert result.to_list() == [True, False]
 
     def test_subsearch_invalid_smarts_raises(self, molecule_series):
         with pytest.raises(InvalidSMARTS):
-            molecule_series.oe.subsearch("invalid[[[smarts")
+            molecule_series.chem.subsearch("invalid[[[smarts")
 
     def test_subsearch_wrong_type_raises(self):
         s = pl.Series("x", ["a", "b", "c"])
         with pytest.raises(TypeError, match="MoleculeType"):
-            s.oe.subsearch("c1ccccc1")
+            s.chem.subsearch("c1ccccc1")
 
 
 class TestSeriesCopyMolecules:
@@ -184,15 +184,15 @@ class TestSeriesCopyMolecules:
         return pl.Series("mol", mols, dtype=MoleculeType())
 
     def test_copy_molecules_returns_series(self, molecule_series):
-        result = molecule_series.oe.copy_molecules()
+        result = molecule_series.chem.copy_molecules()
         assert isinstance(result, pl.Series)
 
     def test_copy_molecules_preserves_dtype(self, molecule_series):
-        result = molecule_series.oe.copy_molecules()
+        result = molecule_series.chem.copy_molecules()
         assert result.dtype.ext_name() == "molecule"
 
     def test_copy_molecules_creates_independent_copies(self, molecule_series):
-        result = molecule_series.oe.copy_molecules()
+        result = molecule_series.chem.copy_molecules()
         # Modify original
         original_mol = molecule_series[0]
         original_mol.SetTitle("modified")
@@ -204,33 +204,33 @@ class TestSeriesCopyMolecules:
         mol = oechem.OEMol()
         oechem.OEParseSmiles(mol, "CCO")
         s = pl.Series("mol", [mol, None], dtype=MoleculeType())
-        result = s.oe.copy_molecules()
+        result = s.chem.copy_molecules()
         assert result[0] is not None
         assert result[1] is None
 
     def test_copy_molecules_wrong_type_raises(self):
         s = pl.Series("x", ["a", "b", "c"])
         with pytest.raises(TypeError, match="MoleculeType"):
-            s.oe.copy_molecules()
+            s.chem.copy_molecules()
 
 
 class TestSeriesDesignUnitOperations:
     def test_copy_design_units_returns_series(self):
         du = oechem.OEDesignUnit()
         s = pl.Series("du", [du], dtype=DesignUnitType())
-        result = s.oe.copy_design_units()
+        result = s.chem.copy_design_units()
         assert isinstance(result, pl.Series)
 
     def test_copy_design_units_preserves_dtype(self):
         du = oechem.OEDesignUnit()
         s = pl.Series("du", [du], dtype=DesignUnitType())
-        result = s.oe.copy_design_units()
+        result = s.chem.copy_design_units()
         assert result.dtype.ext_name() == "design_unit"
 
     def test_copy_design_units_wrong_type_raises(self):
         s = pl.Series("x", ["a", "b", "c"])
         with pytest.raises(TypeError, match="DesignUnitType"):
-            s.oe.copy_design_units()
+            s.chem.copy_design_units()
 
     def test_get_ligands_returns_molecule_series(self):
         # Create a design unit with a ligand
@@ -239,26 +239,26 @@ class TestSeriesDesignUnitOperations:
         oechem.OEParseSmiles(mol, "CCO")
         # Note: This is a simplified test - real DUs come from files
         s = pl.Series("du", [du], dtype=DesignUnitType())
-        result = s.oe.get_ligands()
+        result = s.chem.get_ligands()
         assert result.dtype.ext_name() == "molecule"
 
     def test_get_proteins_returns_molecule_series(self):
         du = oechem.OEDesignUnit()
         s = pl.Series("du", [du], dtype=DesignUnitType())
-        result = s.oe.get_proteins()
+        result = s.chem.get_proteins()
         assert result.dtype.ext_name() == "molecule"
 
     def test_get_components_returns_molecule_series(self):
         du = oechem.OEDesignUnit()
         s = pl.Series("du", [du], dtype=DesignUnitType())
-        result = s.oe.get_components(oechem.OEDesignUnitComponents_Ligand)
+        result = s.chem.get_components(oechem.OEDesignUnitComponents_Ligand)
         assert result.dtype.ext_name() == "molecule"
 
     def test_copy_design_units_creates_independent_copies(self):
         du = oechem.OEDesignUnit()
         du.SetTitle("original")
         s = pl.Series("du", [du], dtype=DesignUnitType())
-        result = s.oe.copy_design_units()
+        result = s.chem.copy_design_units()
         # Modify original
         du.SetTitle("modified")
         # Verify copy is unaffected
@@ -267,34 +267,34 @@ class TestSeriesDesignUnitOperations:
     def test_copy_design_units_with_nulls(self):
         du = oechem.OEDesignUnit()
         s = pl.Series("du", [du, None], dtype=DesignUnitType())
-        result = s.oe.copy_design_units()
+        result = s.chem.copy_design_units()
         assert result[0] is not None
         assert result[1] is None
 
     def test_get_ligands_wrong_type_raises(self):
         s = pl.Series("x", ["a", "b", "c"])
         with pytest.raises(TypeError, match="DesignUnitType"):
-            s.oe.get_ligands()
+            s.chem.get_ligands()
 
     def test_get_proteins_wrong_type_raises(self):
         s = pl.Series("x", ["a", "b", "c"])
         with pytest.raises(TypeError, match="DesignUnitType"):
-            s.oe.get_proteins()
+            s.chem.get_proteins()
 
     def test_get_components_wrong_type_raises(self):
         s = pl.Series("x", ["a", "b", "c"])
         with pytest.raises(TypeError, match="DesignUnitType"):
-            s.oe.get_components(oechem.OEDesignUnitComponents_Ligand)
+            s.chem.get_components(oechem.OEDesignUnitComponents_Ligand)
 
     def test_get_ligands_with_nulls(self):
         du = oechem.OEDesignUnit()
         s = pl.Series("du", [du, None], dtype=DesignUnitType())
-        result = s.oe.get_ligands()
+        result = s.chem.get_ligands()
         # Empty DU has no ligand, and null DU also returns null
         assert result[1] is None
 
     def test_get_proteins_with_nulls(self):
         du = oechem.OEDesignUnit()
         s = pl.Series("du", [du, None], dtype=DesignUnitType())
-        result = s.oe.get_proteins()
+        result = s.chem.get_proteins()
         assert result[1] is None

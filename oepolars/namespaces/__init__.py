@@ -1,6 +1,6 @@
-"""Polars namespace extensions for OpenEye operations."""
+"""Polars namespace extensions for OpenEye chemistry operations."""
 
-from oepolars.namespaces.dataframe import DataFrameOENamespace
-from oepolars.namespaces.series import SeriesOENamespace
+from oepolars.namespaces.dataframe import DataFrameChemNamespace
+from oepolars.namespaces.series import SeriesChemNamespace
 
-__all__ = ["SeriesOENamespace", "DataFrameOENamespace"]
+__all__ = ["SeriesChemNamespace", "DataFrameChemNamespace"]

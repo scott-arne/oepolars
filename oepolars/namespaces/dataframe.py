@@ -60,12 +60,12 @@ def _is_likely_smiles(val: str) -> bool:
     return mol.NumAtoms() > 1
 
 
-@pl.api.register_dataframe_namespace("oe")
-class DataFrameOENamespace:
+@pl.api.register_dataframe_namespace("chem")
+class DataFrameChemNamespace:
     """
-    Namespace for OpenEye operations on Polars DataFrames.
+    Namespace for OpenEye chemistry operations on Polars DataFrames.
 
-    Accessed via `df.oe.*`.
+    Accessed via `df.chem.*`.
     """
 
     def __init__(self, df: pl.DataFrame) -> None:
@@ -100,7 +100,7 @@ class DataFrameOENamespace:
         Examples
         --------
         >>> df = pl.DataFrame({"smiles": ["CCO", "c1ccccc1"]})
-        >>> df.oe.as_molecule("smiles")
+        >>> df.chem.as_molecule("smiles")
         """
         columns = [columns] if isinstance(columns, str) else list(columns)
 
@@ -172,8 +172,8 @@ class DataFrameOENamespace:
 
         Examples
         --------
-        >>> df.oe.filter_valid("Molecule")
-        >>> df.oe.filter_valid(["Molecule", "Ligand"])
+        >>> df.chem.filter_valid("Molecule")
+        >>> df.chem.filter_valid(["Molecule", "Ligand"])
         """
         columns = [columns] if isinstance(columns, str) else list(columns)
 
@@ -210,7 +210,7 @@ class DataFrameOENamespace:
         Examples
         --------
         >>> df = pl.DataFrame({"smiles": ["CCO", "c1ccccc1"]})
-        >>> df.oe.detect_molecule_columns()
+        >>> df.chem.detect_molecule_columns()
         """
         result = self._df.clone()
         columns_to_convert: list[str] = []
@@ -249,6 +249,6 @@ class DataFrameOENamespace:
 
         # Convert detected columns
         if columns_to_convert:
-            result = result.oe.as_molecule(columns_to_convert)
+            result = result.chem.as_molecule(columns_to_convert)
 
         return result
