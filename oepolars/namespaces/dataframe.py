@@ -302,32 +302,33 @@ class DataFrameChemNamespace:
 
         ofs = oechem.oemolostream(str(Path(filepath)))
 
-        if flavor is not None:
-            ofs.SetFlavor(oechem.OEFormat_SDF, flavor)
+        try:
+            if flavor is not None:
+                ofs.SetFlavor(oechem.OEFormat_SDF, flavor)
 
-        sd_cols_list = list(sd_columns) if sd_columns else []
+            sd_cols_list = list(sd_columns) if sd_columns else []
 
-        for row_idx in range(len(self._df)):
-            mol = self._df[molecule_column][row_idx]
-            if mol is None:
-                continue
+            for row_idx in range(len(self._df)):
+                mol = self._df[molecule_column][row_idx]
+                if mol is None:
+                    continue
 
-            # Make a copy to avoid modifying original
-            mol_copy = oechem.OEMol(mol)
+                # Make a copy to avoid modifying original
+                mol_copy = oechem.OEMol(mol)
 
-            # Set title if specified
-            if title_column and title_column in self._df.columns:
-                title = self._df[title_column][row_idx]
-                if title is not None:
-                    mol_copy.SetTitle(str(title))
+                # Set title if specified
+                if title_column and title_column in self._df.columns:
+                    title = self._df[title_column][row_idx]
+                    if title is not None:
+                        mol_copy.SetTitle(str(title))
 
-            # Add SD data
-            for sd_col in sd_cols_list:
-                if sd_col in self._df.columns:
-                    value = self._df[sd_col][row_idx]
-                    if value is not None:
-                        oechem.OESetSDData(mol_copy, sd_col, str(value))
+                # Add SD data
+                for sd_col in sd_cols_list:
+                    if sd_col in self._df.columns:
+                        value = self._df[sd_col][row_idx]
+                        if value is not None:
+                            oechem.OESetSDData(mol_copy, sd_col, str(value))
 
-            oechem.OEWriteMolecule(ofs, mol_copy)
-
-        ofs.close()
+                oechem.OEWriteMolecule(ofs, mol_copy)
+        finally:
+            ofs.close()
