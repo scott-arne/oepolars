@@ -2,6 +2,7 @@
 
 import logging
 from collections.abc import Iterable
+from pathlib import Path
 
 import polars as pl
 from openeye import oechem
@@ -252,3 +253,81 @@ class DataFrameChemNamespace:
             result = result.chem.as_molecule(columns_to_convert)
 
         return result
+
+    def write_sdf(
+        self,
+        filepath: str | Path,
+        *,
+        molecule_column: str,
+        title_column: str | None = None,
+        sd_columns: Iterable[str] | None = None,
+        flavor: int | None = None,
+    ) -> None:
+        """
+        Write molecules to an SDF file.
+
+        Parameters
+        ----------
+        filepath
+            Path to output SDF file.
+        molecule_column
+            Name of the column containing molecules.
+        title_column
+            Column to use for molecule titles (optional).
+        sd_columns
+            Columns to write as SD data tags (optional).
+        flavor
+            OpenEye flavor flags for writing.
+
+        Raises
+        ------
+        KeyError
+            If molecule_column does not exist.
+        TypeError
+            If molecule_column is not MoleculeType.
+
+        Examples
+        --------
+        >>> df.chem.write_sdf("output.sdf", molecule_column="Molecule")
+        >>> df.chem.write_sdf("output.sdf", molecule_column="Mol", sd_columns=["MW", "LogP"])
+        """
+        if molecule_column not in self._df.columns:
+            raise KeyError(f"Column not found: {molecule_column}")
+
+        if not _is_molecule_type(self._df.schema[molecule_column]):
+            raise TypeError(
+                f"Column '{molecule_column}' is not MoleculeType, "
+                f"got {self._df.schema[molecule_column]}"
+            )
+
+        ofs = oechem.oemolostream(str(Path(filepath)))
+
+        if flavor is not None:
+            ofs.SetFlavor(oechem.OEFormat_SDF, flavor)
+
+        sd_cols_list = list(sd_columns) if sd_columns else []
+
+        for row_idx in range(len(self._df)):
+            mol = self._df[molecule_column][row_idx]
+            if mol is None:
+                continue
+
+            # Make a copy to avoid modifying original
+            mol_copy = oechem.OEMol(mol)
+
+            # Set title if specified
+            if title_column and title_column in self._df.columns:
+                title = self._df[title_column][row_idx]
+                if title is not None:
+                    mol_copy.SetTitle(str(title))
+
+            # Add SD data
+            for sd_col in sd_cols_list:
+                if sd_col in self._df.columns:
+                    value = self._df[sd_col][row_idx]
+                    if value is not None:
+                        oechem.OESetSDData(mol_copy, sd_col, str(value))
+
+            oechem.OEWriteMolecule(ofs, mol_copy)
+
+        ofs.close()

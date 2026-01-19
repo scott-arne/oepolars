@@ -132,3 +132,68 @@ class TestDataFrameDetectMoleculeColumns:
         result = df.chem.detect_molecule_columns()
         assert result.schema["x"] == pl.Int64
         assert result.schema["y"] == pl.String
+
+
+class TestDataFrameWriteSDF:
+    @pytest.fixture
+    def molecule_dataframe(self):
+        mols = []
+        for smiles in ["CCO", "c1ccccc1"]:
+            mol = oechem.OEMol()
+            oechem.OEParseSmiles(mol, smiles)
+            mols.append(mol)
+        return pl.DataFrame({
+            "Molecule": pl.Series(mols, dtype=MoleculeType()),
+            "name": ["ethanol", "benzene"],
+            "MW": [46.07, 78.11],
+        })
+
+    def test_write_sdf_creates_file(self, molecule_dataframe, tmp_path):
+        output_path = tmp_path / "output.sdf"
+        molecule_dataframe.chem.write_sdf(output_path, molecule_column="Molecule")
+        assert output_path.exists()
+
+    def test_write_sdf_readable(self, molecule_dataframe, tmp_path):
+        output_path = tmp_path / "output.sdf"
+        molecule_dataframe.chem.write_sdf(output_path, molecule_column="Molecule")
+
+        # Read it back
+        import oepolars as oep
+        df_back = oep.read_sdf(output_path)
+        assert len(df_back) == 2
+
+    def test_write_sdf_with_sd_data(self, molecule_dataframe, tmp_path):
+        output_path = tmp_path / "output.sdf"
+        molecule_dataframe.chem.write_sdf(
+            output_path,
+            molecule_column="Molecule",
+            sd_columns=["name", "MW"]
+        )
+
+        import oepolars as oep
+        df_back = oep.read_sdf(output_path)
+        assert "name" in df_back.columns
+        assert "MW" in df_back.columns
+
+    def test_write_sdf_with_title_column(self, molecule_dataframe, tmp_path):
+        output_path = tmp_path / "output.sdf"
+        molecule_dataframe.chem.write_sdf(
+            output_path,
+            molecule_column="Molecule",
+            title_column="name"
+        )
+
+        import oepolars as oep
+        df_back = oep.read_sdf(output_path)
+        assert df_back["Title"].to_list() == ["ethanol", "benzene"]
+
+    def test_write_sdf_invalid_molecule_column_raises(self, molecule_dataframe, tmp_path):
+        output_path = tmp_path / "output.sdf"
+        with pytest.raises(KeyError):
+            molecule_dataframe.chem.write_sdf(output_path, molecule_column="nonexistent")
+
+    def test_write_sdf_wrong_column_type_raises(self, tmp_path):
+        df = pl.DataFrame({"x": [1, 2, 3]})
+        output_path = tmp_path / "output.sdf"
+        with pytest.raises(TypeError):
+            df.chem.write_sdf(output_path, molecule_column="x")
