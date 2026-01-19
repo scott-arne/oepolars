@@ -44,7 +44,7 @@ from oepolars.exceptions import (  # noqa: E402
     OEPolarsError,
     UnsupportedFileFormat,
 )
-from oepolars.io import read_molecule_csv, read_oeb, read_oedb, read_oedu, read_sdf, read_smi  # noqa: E402
+from oepolars.io import read_molecule_csv, read_oeb, read_oedb, read_oedu, read_sdf, read_smi, scan_sdf  # noqa: E402
 from oepolars.types import DesignUnitType, DisplayType, MoleculeType  # noqa: E402
 
 __all__ = [
@@ -68,4 +68,5 @@ __all__ = [
     "read_oedu",
     "read_sdf",
     "read_smi",
+    "scan_sdf",
 ]
