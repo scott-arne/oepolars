@@ -142,3 +142,181 @@ class TestScanSMI:
 
         with pytest.raises(FileError):
             oep.scan_smi("nonexistent.smi")
+
+
+class TestScanParquet:
+    @pytest.fixture
+    def parquet_file(self, tmp_path):
+        """Create a temporary Parquet file with molecules for testing."""
+        # Create a DataFrame with molecules and write to Parquet
+        df = oep.read_sdf(FIXTURES_DIR / "sample.sdf")
+        parquet_path = tmp_path / "test.parquet"
+        df.chem.write_parquet(parquet_path)
+        return parquet_path
+
+    def test_scan_parquet_returns_lazyframe(self, parquet_file):
+        lf = oep.scan_parquet(parquet_file, molecule_columns=["Molecule"])
+        assert isinstance(lf, pl.LazyFrame)
+
+    def test_scan_parquet_collects_to_dataframe(self, parquet_file):
+        lf = oep.scan_parquet(parquet_file, molecule_columns=["Molecule"])
+        df = lf.collect()
+        assert isinstance(df, pl.DataFrame)
+
+    def test_scan_parquet_has_molecule_column(self, parquet_file):
+        lf = oep.scan_parquet(parquet_file, molecule_columns=["Molecule"])
+        df = lf.collect()
+        assert "Molecule" in df.columns
+        assert df.schema["Molecule"].ext_name() == "molecule"
+
+    def test_scan_parquet_preserves_data(self, parquet_file):
+        lf = oep.scan_parquet(parquet_file, molecule_columns=["Molecule"])
+        df = lf.collect()
+        assert len(df) == 2
+        assert "Title" in df.columns
+
+    def test_scan_parquet_supports_filter(self, parquet_file):
+        lf = oep.scan_parquet(parquet_file, molecule_columns=["Molecule"])
+        lf_filtered = lf.filter(pl.col("Title") == "ethanol")
+        df = lf_filtered.collect()
+        assert len(df) == 1
+
+    def test_scan_parquet_file_not_found_raises(self):
+        from oepolars.exceptions import FileError
+
+        with pytest.raises(FileError):
+            oep.scan_parquet("nonexistent.parquet", molecule_columns=["Molecule"])
+
+
+class TestScanOEDB:
+    @pytest.fixture
+    def oedb_file(self, tmp_path):
+        """Create a temporary OEDB file for testing.
+
+        Note: We use .oeb extension because oemolostream auto-detects
+        format from extension, and .oedb is not a standard recognized extension.
+        The scan_oedb function works with any format that oemolistream supports.
+        """
+        from openeye import oechem
+
+        oedb_path = tmp_path / "test.oeb"
+        ofs = oechem.oemolostream(str(oedb_path))
+
+        for smiles, title in [("CCO", "ethanol"), ("c1ccccc1", "benzene")]:
+            mol = oechem.OEMol()
+            oechem.OEParseSmiles(mol, smiles)
+            mol.SetTitle(title)
+            oechem.OESetSDData(mol, "MW", "46.07" if smiles == "CCO" else "78.11")
+            oechem.OEWriteMolecule(ofs, mol)
+
+        ofs.close()
+        return oedb_path
+
+    def test_scan_oedb_returns_lazyframe(self, oedb_file):
+        lf = oep.scan_oedb(oedb_file)
+        assert isinstance(lf, pl.LazyFrame)
+
+    def test_scan_oedb_collects_to_dataframe(self, oedb_file):
+        lf = oep.scan_oedb(oedb_file)
+        df = lf.collect()
+        assert isinstance(df, pl.DataFrame)
+
+    def test_scan_oedb_has_molecule_column(self, oedb_file):
+        lf = oep.scan_oedb(oedb_file)
+        df = lf.collect()
+        assert "Molecule" in df.columns
+        assert df.schema["Molecule"].ext_name() == "molecule"
+
+    def test_scan_oedb_supports_filter(self, oedb_file):
+        lf = oep.scan_oedb(oedb_file)
+        lf_filtered = lf.filter(pl.col("Title") == "ethanol")
+        df = lf_filtered.collect()
+        assert len(df) == 1
+
+    def test_scan_oedb_file_not_found_raises(self):
+        from oepolars.exceptions import FileError
+
+        with pytest.raises(FileError):
+            oep.scan_oedb("nonexistent.oedb")
+
+
+class TestScanOEDU:
+    @pytest.fixture
+    def oedu_file(self, tmp_path):
+        """Create a temporary OEDU file for testing."""
+        from openeye import oechem
+
+        oedu_path = tmp_path / "test.oedu"
+        ofs = oechem.oeofstream(str(oedu_path))
+
+        # Create minimal design units with just a title
+        for title in ["complex1", "complex2"]:
+            du = oechem.OEDesignUnit()
+            du.SetTitle(title)
+            oechem.OEWriteDesignUnit(ofs, du)
+
+        ofs.close()
+        return oedu_path
+
+    def test_scan_oedu_returns_lazyframe(self, oedu_file):
+        lf = oep.scan_oedu(oedu_file)
+        assert isinstance(lf, pl.LazyFrame)
+
+    def test_scan_oedu_collects_to_dataframe(self, oedu_file):
+        lf = oep.scan_oedu(oedu_file)
+        df = lf.collect()
+        assert isinstance(df, pl.DataFrame)
+
+    def test_scan_oedu_has_design_unit_column(self, oedu_file):
+        lf = oep.scan_oedu(oedu_file)
+        df = lf.collect()
+        assert "DesignUnit" in df.columns
+        assert df.schema["DesignUnit"].ext_name() == "design_unit"
+
+    def test_scan_oedu_supports_filter(self, oedu_file):
+        lf = oep.scan_oedu(oedu_file)
+        lf_filtered = lf.filter(pl.col("Title") == "complex1")
+        df = lf_filtered.collect()
+        assert len(df) == 1
+
+    def test_scan_oedu_file_not_found_raises(self):
+        from oepolars.exceptions import FileError
+
+        with pytest.raises(FileError):
+            oep.scan_oedu("nonexistent.oedu")
+
+
+class TestScanMoleculeCSV:
+    def test_scan_molecule_csv_returns_lazyframe(self):
+        lf = oep.scan_molecule_csv(FIXTURES_DIR / "sample.csv", smiles_column="smiles")
+        assert isinstance(lf, pl.LazyFrame)
+
+    def test_scan_molecule_csv_collects_to_dataframe(self):
+        lf = oep.scan_molecule_csv(FIXTURES_DIR / "sample.csv", smiles_column="smiles")
+        df = lf.collect()
+        assert isinstance(df, pl.DataFrame)
+
+    def test_scan_molecule_csv_has_molecule_column(self):
+        lf = oep.scan_molecule_csv(FIXTURES_DIR / "sample.csv", smiles_column="smiles")
+        df = lf.collect()
+        assert "Molecule" in df.columns
+        assert df.schema["Molecule"].ext_name() == "molecule"
+
+    def test_scan_molecule_csv_preserves_other_columns(self):
+        lf = oep.scan_molecule_csv(FIXTURES_DIR / "sample.csv", smiles_column="smiles")
+        df = lf.collect()
+        assert "name" in df.columns
+        assert "MW" in df.columns
+        assert len(df) == 3
+
+    def test_scan_molecule_csv_supports_filter(self):
+        lf = oep.scan_molecule_csv(FIXTURES_DIR / "sample.csv", smiles_column="smiles")
+        lf_filtered = lf.filter(pl.col("name") == "ethanol")
+        df = lf_filtered.collect()
+        assert len(df) == 1
+
+    def test_scan_molecule_csv_file_not_found_raises(self):
+        from oepolars.exceptions import FileError
+
+        with pytest.raises(FileError):
+            oep.scan_molecule_csv("nonexistent.csv", smiles_column="smiles")

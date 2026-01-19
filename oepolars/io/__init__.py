@@ -9,7 +9,15 @@ from oepolars.io.readers import (
     read_sdf,
     read_smi,
 )
-from oepolars.io.scanners import scan_oeb, scan_sdf, scan_smi
+from oepolars.io.scanners import (
+    scan_molecule_csv,
+    scan_oeb,
+    scan_oedb,
+    scan_oedu,
+    scan_parquet,
+    scan_sdf,
+    scan_smi,
+)
 
 __all__ = [
     "read_molecule_csv",
@@ -19,7 +27,11 @@ __all__ = [
     "read_parquet",
     "read_sdf",
     "read_smi",
+    "scan_molecule_csv",
     "scan_oeb",
+    "scan_oedb",
+    "scan_oedu",
+    "scan_parquet",
     "scan_sdf",
     "scan_smi",
 ]
