@@ -332,3 +332,67 @@ class DataFrameChemNamespace:
                 oechem.OEWriteMolecule(ofs, mol_copy)
         finally:
             ofs.close()
+
+    def write_smi(
+        self,
+        filepath: str | Path,
+        *,
+        molecule_column: str,
+        title_column: str | None = None,
+        flavor: int | None = None,
+    ) -> None:
+        """
+        Write molecules to a SMILES file.
+
+        Parameters
+        ----------
+        filepath
+            Path to output SMILES file.
+        molecule_column
+            Name of the column containing molecules.
+        title_column
+            Column to use for molecule titles (optional).
+        flavor
+            OpenEye flavor flags for SMILES writing.
+
+        Raises
+        ------
+        KeyError
+            If molecule_column does not exist.
+        TypeError
+            If molecule_column is not MoleculeType.
+
+        Examples
+        --------
+        >>> df.chem.write_smi("output.smi", molecule_column="Molecule")
+        """
+        if molecule_column not in self._df.columns:
+            raise KeyError(f"Column not found: {molecule_column}")
+
+        if not _is_molecule_type(self._df.schema[molecule_column]):
+            raise TypeError(
+                f"Column '{molecule_column}' is not MoleculeType, "
+                f"got {self._df.schema[molecule_column]}"
+            )
+
+        ofs = oechem.oemolostream(str(Path(filepath)))
+
+        try:
+            if flavor is not None:
+                ofs.SetFlavor(oechem.OEFormat_SMI, flavor)
+
+            for row_idx in range(len(self._df)):
+                mol = self._df[molecule_column][row_idx]
+                if mol is None:
+                    continue
+
+                mol_copy = oechem.OEMol(mol)
+
+                if title_column and title_column in self._df.columns:
+                    title = self._df[title_column][row_idx]
+                    if title is not None:
+                        mol_copy.SetTitle(str(title))
+
+                oechem.OEWriteMolecule(ofs, mol_copy)
+        finally:
+            ofs.close()
