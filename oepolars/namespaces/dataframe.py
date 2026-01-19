@@ -396,3 +396,76 @@ class DataFrameChemNamespace:
                 oechem.OEWriteMolecule(ofs, mol_copy)
         finally:
             ofs.close()
+
+    def write_molecule_csv(
+        self,
+        filepath: str | Path,
+        *,
+        molecule_column: str,
+        smiles_column: str = "smiles",
+        smiles_flavor: int = oechem.OESMILESFlag_ISOMERIC,
+        drop_molecule: bool = True,
+        **csv_kwargs,
+    ) -> None:
+        """
+        Write DataFrame to CSV with molecules as SMILES strings.
+
+        Converts the molecule column to SMILES and writes as CSV.
+
+        Parameters
+        ----------
+        filepath
+            Path to output CSV file.
+        molecule_column
+            Name of the column containing molecules.
+        smiles_column
+            Name for the SMILES column in output.
+        smiles_flavor
+            OpenEye SMILES flavor flags.
+        drop_molecule
+            If True, remove the molecule column from output.
+        **csv_kwargs
+            Additional arguments passed to pl.DataFrame.write_csv().
+
+        Raises
+        ------
+        KeyError
+            If molecule_column does not exist.
+        TypeError
+            If molecule_column is not MoleculeType.
+
+        Examples
+        --------
+        >>> df.chem.write_molecule_csv("output.csv", molecule_column="Molecule")
+        """
+        if molecule_column not in self._df.columns:
+            raise KeyError(f"Column not found: {molecule_column}")
+
+        if not _is_molecule_type(self._df.schema[molecule_column]):
+            raise TypeError(
+                f"Column '{molecule_column}' is not MoleculeType, "
+                f"got {self._df.schema[molecule_column]}"
+            )
+
+        # Convert molecules to SMILES
+        smiles_list = []
+        for mol in self._df[molecule_column].to_list():
+            if mol is None:
+                smiles_list.append(None)
+            else:
+                smiles_list.append(oechem.OECreateSmiString(mol, smiles_flavor))
+
+        # Create output DataFrame
+        df_out = self._df.clone()
+
+        # Add SMILES column
+        df_out = df_out.with_columns(
+            pl.Series(smiles_column, smiles_list, dtype=pl.String)
+        )
+
+        # Drop molecule column if requested
+        if drop_molecule:
+            df_out = df_out.drop(molecule_column)
+
+        # Write CSV
+        df_out.write_csv(str(Path(filepath)), **csv_kwargs)

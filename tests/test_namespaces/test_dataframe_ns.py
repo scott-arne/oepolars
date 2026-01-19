@@ -247,3 +247,63 @@ class TestDataFrameWriteSMI:
         output_path = tmp_path / "output.smi"
         with pytest.raises(TypeError):
             df.chem.write_smi(output_path, molecule_column="x")
+
+
+class TestDataFrameWriteMoleculeCSV:
+    @pytest.fixture
+    def molecule_dataframe(self):
+        mols = []
+        for smiles in ["CCO", "c1ccccc1"]:
+            mol = oechem.OEMol()
+            oechem.OEParseSmiles(mol, smiles)
+            mols.append(mol)
+        return pl.DataFrame({
+            "Molecule": pl.Series(mols, dtype=MoleculeType()),
+            "name": ["ethanol", "benzene"],
+            "MW": [46.07, 78.11],
+        })
+
+    def test_write_molecule_csv_creates_file(self, molecule_dataframe, tmp_path):
+        output_path = tmp_path / "output.csv"
+        molecule_dataframe.chem.write_molecule_csv(output_path, molecule_column="Molecule")
+        assert output_path.exists()
+
+    def test_write_molecule_csv_readable(self, molecule_dataframe, tmp_path):
+        output_path = tmp_path / "output.csv"
+        molecule_dataframe.chem.write_molecule_csv(output_path, molecule_column="Molecule")
+
+        # Read it back as regular CSV
+        df_back = pl.read_csv(output_path)
+        assert len(df_back) == 2
+        assert "smiles" in df_back.columns  # Default SMILES column name
+
+    def test_write_molecule_csv_custom_smiles_column(self, molecule_dataframe, tmp_path):
+        output_path = tmp_path / "output.csv"
+        molecule_dataframe.chem.write_molecule_csv(
+            output_path,
+            molecule_column="Molecule",
+            smiles_column="SMILES"
+        )
+
+        df_back = pl.read_csv(output_path)
+        assert "SMILES" in df_back.columns
+
+    def test_write_molecule_csv_preserves_other_columns(self, molecule_dataframe, tmp_path):
+        output_path = tmp_path / "output.csv"
+        molecule_dataframe.chem.write_molecule_csv(output_path, molecule_column="Molecule")
+
+        df_back = pl.read_csv(output_path)
+        assert "name" in df_back.columns
+        assert "MW" in df_back.columns
+        assert df_back["name"].to_list() == ["ethanol", "benzene"]
+
+    def test_write_molecule_csv_invalid_molecule_column_raises(self, molecule_dataframe, tmp_path):
+        output_path = tmp_path / "output.csv"
+        with pytest.raises(KeyError):
+            molecule_dataframe.chem.write_molecule_csv(output_path, molecule_column="nonexistent")
+
+    def test_write_molecule_csv_wrong_column_type_raises(self, tmp_path):
+        df = pl.DataFrame({"x": [1, 2, 3]})
+        output_path = tmp_path / "output.csv"
+        with pytest.raises(TypeError):
+            df.chem.write_molecule_csv(output_path, molecule_column="x")
