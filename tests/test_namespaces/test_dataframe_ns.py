@@ -371,3 +371,112 @@ class TestDataFrameWriteOEB:
         output_path = tmp_path / "output.oeb"
         with pytest.raises(TypeError):
             df.chem.write_oeb(output_path, molecule_column="x")
+
+
+class TestDataFrameWriteParquet:
+    @pytest.fixture
+    def molecule_dataframe(self):
+        mols = []
+        for smiles in ["CCO", "c1ccccc1"]:
+            mol = oechem.OEMol()
+            oechem.OEParseSmiles(mol, smiles)
+            mols.append(mol)
+        return pl.DataFrame({
+            "Molecule": pl.Series(mols, dtype=MoleculeType()),
+            "name": ["ethanol", "benzene"],
+            "MW": [46.07, 78.11],
+        })
+
+    def test_write_parquet_creates_file(self, molecule_dataframe, tmp_path):
+        """Verify that write_parquet creates a file."""
+        output_path = tmp_path / "output.parquet"
+        molecule_dataframe.chem.write_parquet(output_path)
+        assert output_path.exists()
+
+    def test_write_parquet_serializes_molecules(self, molecule_dataframe, tmp_path):
+        """Verify molecules are converted to binary bytes."""
+        output_path = tmp_path / "output.parquet"
+        molecule_dataframe.chem.write_parquet(output_path)
+
+        # Read back the parquet file
+        df_back = pl.read_parquet(output_path)
+
+        # Molecule column should be Binary type
+        assert df_back.schema["Molecule"] == pl.Binary
+
+        # Verify we can deserialize back to molecules
+        from oepolars.util import bytes_to_mol
+        mol_bytes = df_back["Molecule"][0]
+        assert isinstance(mol_bytes, bytes)
+        mol = bytes_to_mol(mol_bytes)
+        assert mol is not None
+        assert mol.NumAtoms() > 0
+
+    def test_write_parquet_preserves_other_columns(self, molecule_dataframe, tmp_path):
+        """Verify non-molecule columns are unchanged."""
+        output_path = tmp_path / "output.parquet"
+        molecule_dataframe.chem.write_parquet(output_path)
+
+        df_back = pl.read_parquet(output_path)
+
+        # Non-molecule columns should be preserved
+        assert df_back["name"].to_list() == ["ethanol", "benzene"]
+        assert df_back["MW"].to_list() == [46.07, 78.11]
+
+    def test_write_parquet_handles_nulls(self, tmp_path):
+        """Verify null molecules become null bytes."""
+        mol = oechem.OEMol()
+        oechem.OEParseSmiles(mol, "CCO")
+        df = pl.DataFrame({
+            "Molecule": pl.Series([mol, None], dtype=MoleculeType()),
+            "name": ["ethanol", "none"],
+        })
+
+        output_path = tmp_path / "output.parquet"
+        df.chem.write_parquet(output_path)
+
+        df_back = pl.read_parquet(output_path)
+        assert df_back["Molecule"][0] is not None  # First mol serialized
+        assert df_back["Molecule"][1] is None  # Null stays null
+
+    def test_write_parquet_auto_detects_molecule_columns(self, tmp_path):
+        """Verify auto-detection of molecule columns works."""
+        mol1 = oechem.OEMol()
+        oechem.OEParseSmiles(mol1, "CCO")
+        mol2 = oechem.OEMol()
+        oechem.OEParseSmiles(mol2, "c1ccccc1")
+
+        df = pl.DataFrame({
+            "Mol1": pl.Series([mol1, mol2], dtype=MoleculeType()),
+            "Mol2": pl.Series([mol2, mol1], dtype=MoleculeType()),
+            "name": ["a", "b"],
+        })
+
+        output_path = tmp_path / "output.parquet"
+        # Don't specify molecule_columns - should auto-detect both
+        df.chem.write_parquet(output_path)
+
+        df_back = pl.read_parquet(output_path)
+        # Both molecule columns should be serialized to Binary
+        assert df_back.schema["Mol1"] == pl.Binary
+        assert df_back.schema["Mol2"] == pl.Binary
+        assert df_back.schema["name"] == pl.String
+
+    def test_write_parquet_explicit_molecule_columns(self, molecule_dataframe, tmp_path):
+        """Verify explicit column specification works."""
+        output_path = tmp_path / "output.parquet"
+        # Explicitly specify the molecule column
+        molecule_dataframe.chem.write_parquet(output_path, molecule_columns=["Molecule"])
+
+        df_back = pl.read_parquet(output_path)
+        # Molecule column should be Binary
+        assert df_back.schema["Molecule"] == pl.Binary
+        # Other columns preserved
+        assert df_back["name"].to_list() == ["ethanol", "benzene"]
+
+    def test_write_parquet_passes_kwargs(self, molecule_dataframe, tmp_path):
+        """Verify parquet kwargs are passed through."""
+        output_path = tmp_path / "output.parquet"
+        # Test with compression kwarg
+        molecule_dataframe.chem.write_parquet(output_path, compression="snappy")
+        assert output_path.exists()

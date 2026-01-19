@@ -8,6 +8,7 @@ import polars as pl
 from openeye import oechem
 
 from oepolars.types import MoleculeType
+from oepolars.util import mol_to_bytes
 
 log = logging.getLogger("oepolars")
 
@@ -538,3 +539,55 @@ class DataFrameChemNamespace:
                 oechem.OEWriteMolecule(ofs, mol_copy)
         finally:
             ofs.close()
+
+    def write_parquet(
+        self,
+        filepath: str | Path,
+        *,
+        molecule_columns: Iterable[str] | None = None,
+        **parquet_kwargs,
+    ) -> None:
+        """
+        Write DataFrame to Parquet with molecules serialized to binary OEB format.
+
+        Molecule columns are converted to binary (bytes) using OEB format before
+        writing, allowing the data to be stored in standard Parquet files.
+
+        Parameters
+        ----------
+        filepath
+            Path to output Parquet file.
+        molecule_columns
+            Column names to serialize as molecules. If None, auto-detects all
+            MoleculeType columns.
+        **parquet_kwargs
+            Additional arguments passed to pl.DataFrame.write_parquet().
+
+        Examples
+        --------
+        >>> df.chem.write_parquet("output.parquet")
+        >>> df.chem.write_parquet("output.parquet", molecule_columns=["Mol1"])
+        >>> df.chem.write_parquet("output.parquet", compression="snappy")
+        """
+        # Auto-detect molecule columns if not specified
+        if molecule_columns is None:
+            mol_cols = [
+                col for col in self._df.columns
+                if _is_molecule_type(self._df.schema[col])
+            ]
+        else:
+            mol_cols = list(molecule_columns)
+
+        # Start with a clone of the DataFrame
+        df_out = self._df.clone()
+
+        # Serialize each molecule column to binary
+        for col in mol_cols:
+            mol_values = df_out[col].to_list()
+            serialized = [mol_to_bytes(mol) for mol in mol_values]
+            df_out = df_out.with_columns(
+                pl.Series(col, serialized, dtype=pl.Binary)
+            )
+
+        # Write to Parquet
+        df_out.write_parquet(str(Path(filepath)), **parquet_kwargs)
