@@ -37,18 +37,10 @@ FORMAT_MAP: dict[str, int] = {
 
 
 def is_gz(filepath: str | Path) -> bool:
-    """
-    Check if a file path indicates gzip compression.
+    """Check if a file path indicates gzip compression.
 
-    Parameters
-    ----------
-    filepath
-        Path to check for gzip extension.
-
-    Returns
-    -------
-    bool
-        True if the file has a .gz or .gzip extension.
+    :param filepath: Path to check for gzip extension.
+    :returns: True if the file has a .gz or .gzip extension.
     """
     path = Path(filepath) if isinstance(filepath, str) else filepath
     suffixes = [s.lower() for s in path.suffixes]
@@ -56,26 +48,17 @@ def is_gz(filepath: str | Path) -> bool:
 
 
 def mol_to_bytes(mol: oechem.OEMolBase | None) -> bytes | None:
-    """
-    Serialize a molecule to OEB binary format.
+    """Serialize a molecule to OEB binary format.
 
-    Parameters
-    ----------
-    mol
-        The molecule to serialize, or None.
+    :param mol: The molecule to serialize, or None.
+    :returns: Binary representation of the molecule, or None if mol is None.
 
-    Returns
-    -------
-    bytes | None
-        Binary representation of the molecule, or None if mol is None.
+    Example::
 
-    Examples
-    --------
-    >>> mol = oechem.OEMol()
-    >>> oechem.OEParseSmiles(mol, "CCO")
-    >>> data = mol_to_bytes(mol)
-    >>> isinstance(data, bytes)
-    True
+        mol = oechem.OEMol()
+        oechem.OEParseSmiles(mol, "CCO")
+        data = mol_to_bytes(mol)
+        isinstance(data, bytes)  # Returns True
     """
     if mol is None:
         return None
@@ -83,25 +66,16 @@ def mol_to_bytes(mol: oechem.OEMolBase | None) -> bytes | None:
 
 
 def bytes_to_mol(data: bytes | None) -> oechem.OEMol | None:
-    """
-    Deserialize a molecule from OEB binary format.
+    """Deserialize a molecule from OEB binary format.
 
-    Parameters
-    ----------
-    data
-        Binary data in OEB format, or None.
+    :param data: Binary data in OEB format, or None.
+    :returns: The deserialized molecule, or None if data is None/empty/invalid.
 
-    Returns
-    -------
-    oechem.OEMol | None
-        The deserialized molecule, or None if data is None/empty/invalid.
+    Example::
 
-    Examples
-    --------
-    >>> data = mol_to_bytes(mol)
-    >>> mol2 = bytes_to_mol(data)
-    >>> mol2.GetTitle()
-    'ethanol'
+        data = mol_to_bytes(mol)
+        mol2 = bytes_to_mol(data)
+        mol2.GetTitle()  # Returns 'ethanol'
     """
     if data is None or len(data) == 0:
         return None
@@ -113,25 +87,12 @@ def bytes_to_mol(data: bytes | None) -> oechem.OEMol | None:
 
 
 def get_oeformat(fmt: str | int, gzip: bool) -> OEFormatInfo:
-    """
-    Convert a format specification to OEFormat info.
+    """Convert a format specification to OEFormat info.
 
-    Parameters
-    ----------
-    fmt
-        Format as string (e.g., "sdf", "oeb") or OEFormat constant.
-    gzip
-        Whether gzip compression is enabled.
-
-    Returns
-    -------
-    OEFormatInfo
-        Container with oeformat constant and gzip flag.
-
-    Raises
-    ------
-    UnsupportedFileFormat
-        If the format string is not recognized.
+    :param fmt: Format as string (e.g., "sdf", "oeb") or OEFormat constant.
+    :param gzip: Whether gzip compression is enabled.
+    :returns: Container with oeformat constant and gzip flag.
+    :raises UnsupportedFileFormat: If the format string is not recognized.
     """
     if isinstance(fmt, int):
         return OEFormatInfo(oeformat=fmt, gzip=gzip)

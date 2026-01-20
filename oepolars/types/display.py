@@ -4,25 +4,21 @@ import polars as pl
 
 
 class DisplayType(pl.BaseExtension):
-    """
-    Polars extension type for OpenEye 2D molecule display objects.
+    """Polars extension type for OpenEye 2D molecule display objects.
 
     Stores OE2DMolDisplay objects for molecular visualization using
     Polars' Object dtype as underlying storage.
 
-    Examples
-    --------
-    >>> from openeye import oechem, oedepict
-    >>> mol = oechem.OEMol()
-    >>> oechem.OEParseSmiles(mol, "CCO")
-    True
-    >>> oedepict.OEPrepareDepiction(mol)
-    True
-    >>> opts = oedepict.OE2DMolDisplayOptions()
-    >>> disp = oedepict.OE2DMolDisplay(mol, opts)
-    >>> s = pl.Series("disp", [disp], dtype=DisplayType())
-    >>> s.dtype.ext_name()
-    'display'
+    Example::
+
+        from openeye import oechem, oedepict
+        mol = oechem.OEMol()
+        oechem.OEParseSmiles(mol, "CCO")
+        oedepict.OEPrepareDepiction(mol)
+        opts = oedepict.OE2DMolDisplayOptions()
+        disp = oedepict.OE2DMolDisplay(mol, opts)
+        s = pl.Series("disp", [disp], dtype=DisplayType())
+        s.dtype.ext_name()  # Returns 'display'
     """
 
     def __init__(self) -> None:

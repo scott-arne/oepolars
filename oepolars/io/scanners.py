@@ -29,43 +29,25 @@ def scan_sdf(
     usecols: Iterable[str] | None = None,
     numeric_columns: Iterable[str] | None = None,
 ) -> pl.LazyFrame:
-    """
-    Lazily read molecules from an SDF file.
+    """Lazily read molecules from an SDF file.
 
     Returns a LazyFrame for query optimization. Molecules are read eagerly
     but downstream operations (select, filter, etc.) are optimized lazily.
 
-    Parameters
-    ----------
-    filepath
-        Path to the SDF file.
-    flavor
-        OpenEye flavor flags for reading.
-    molecule_column
-        Name for the molecule column.
-    title_column
-        Name for the title column, or None to skip.
-    sd_data
-        Whether to read SD data tags as columns.
-    usecols
-        Specific SD tags to read (None = all).
-    numeric_columns
-        SD tag columns to convert to numeric types.
+    :param filepath: Path to the SDF file.
+    :param flavor: OpenEye flavor flags for reading.
+    :param molecule_column: Name for the molecule column.
+    :param title_column: Name for the title column, or None to skip.
+    :param sd_data: Whether to read SD data tags as columns.
+    :param usecols: Specific SD tags to read (None = all).
+    :param numeric_columns: SD tag columns to convert to numeric types.
+    :returns: LazyFrame with molecule column and optional SD data.
+    :raises FileError: If the file cannot be read.
 
-    Returns
-    -------
-    pl.LazyFrame
-        LazyFrame with molecule column and optional SD data.
+    Example::
 
-    Raises
-    ------
-    FileError
-        If the file cannot be read.
-
-    Examples
-    --------
-    >>> lf = oep.scan_sdf("molecules.sdf")
-    >>> df = lf.filter(pl.col("MW") > 100).collect()
+        lf = oep.scan_sdf("molecules.sdf")
+        df = lf.filter(pl.col("MW") > 100).collect()
     """
     df = read_sdf(
         filepath,
@@ -88,41 +70,24 @@ def scan_oeb(
     usecols: Iterable[str] | None = None,
     numeric_columns: Iterable[str] | None = None,
 ) -> pl.LazyFrame:
-    """
-    Lazily read molecules from an OEB file.
+    """Lazily read molecules from an OEB file.
 
     Returns a LazyFrame for query optimization. Molecules are read eagerly
     but downstream operations (select, filter, etc.) are optimized lazily.
 
-    Parameters
-    ----------
-    filepath
-        Path to the OEB file.
-    molecule_column
-        Name for the molecule column.
-    title_column
-        Name for the title column, or None to skip.
-    sd_data
-        Whether to read SD data tags as columns.
-    usecols
-        Specific SD tags to read (None = all).
-    numeric_columns
-        SD tag columns to convert to numeric types.
+    :param filepath: Path to the OEB file.
+    :param molecule_column: Name for the molecule column.
+    :param title_column: Name for the title column, or None to skip.
+    :param sd_data: Whether to read SD data tags as columns.
+    :param usecols: Specific SD tags to read (None = all).
+    :param numeric_columns: SD tag columns to convert to numeric types.
+    :returns: LazyFrame with molecule column and optional SD data.
+    :raises FileError: If the file cannot be read.
 
-    Returns
-    -------
-    pl.LazyFrame
-        LazyFrame with molecule column and optional SD data.
+    Example::
 
-    Raises
-    ------
-    FileError
-        If the file cannot be read.
-
-    Examples
-    --------
-    >>> lf = oep.scan_oeb("molecules.oeb")
-    >>> df = lf.collect()
+        lf = oep.scan_oeb("molecules.oeb")
+        df = lf.collect()
     """
     df = read_oeb(
         filepath,
@@ -141,35 +106,21 @@ def scan_smi(
     molecule_column: str = "Molecule",
     title_column: str | None = "Title",
 ) -> pl.LazyFrame:
-    """
-    Lazily read molecules from a SMILES file.
+    """Lazily read molecules from a SMILES file.
 
     Returns a LazyFrame for query optimization. Molecules are read eagerly
     but downstream operations (select, filter, etc.) are optimized lazily.
 
-    Parameters
-    ----------
-    filepath
-        Path to the SMILES file.
-    molecule_column
-        Name for the molecule column.
-    title_column
-        Name for the title column, or None to skip.
+    :param filepath: Path to the SMILES file.
+    :param molecule_column: Name for the molecule column.
+    :param title_column: Name for the title column, or None to skip.
+    :returns: LazyFrame with molecule column and optional title.
+    :raises FileError: If the file cannot be read.
 
-    Returns
-    -------
-    pl.LazyFrame
-        LazyFrame with molecule column and optional title.
+    Example::
 
-    Raises
-    ------
-    FileError
-        If the file cannot be read.
-
-    Examples
-    --------
-    >>> lf = oep.scan_smi("molecules.smi")
-    >>> df = lf.collect()
+        lf = oep.scan_smi("molecules.smi")
+        df = lf.collect()
     """
     df = read_smi(
         filepath,
@@ -185,39 +136,24 @@ def scan_parquet(
     molecule_columns: Iterable[str] | None = None,
     **parquet_kwargs,
 ) -> pl.LazyFrame:
-    """
-    Lazily read molecules from a Parquet file.
+    """Lazily read molecules from a Parquet file.
 
     Returns a LazyFrame for query optimization. Molecules are read eagerly
     but downstream operations (select, filter, etc.) are optimized lazily.
 
-    Parameters
-    ----------
-    filepath
-        Path to the Parquet file.
-    molecule_columns
-        Column names containing serialized molecule data (Binary type).
+    :param filepath: Path to the Parquet file.
+    :param molecule_columns: Column names containing serialized molecule data (Binary type).
         This parameter is required because we cannot auto-detect which
         Binary columns were originally molecules.
-    **parquet_kwargs
-        Additional arguments passed to pl.read_parquet().
+    :param parquet_kwargs: Additional arguments passed to ``pl.read_parquet()``.
+    :returns: LazyFrame with specified binary columns converted to MoleculeType.
+    :raises ValueError: If molecule_columns is not specified (None).
+    :raises FileError: If the file cannot be read.
 
-    Returns
-    -------
-    pl.LazyFrame
-        LazyFrame with specified binary columns converted to MoleculeType.
+    Example::
 
-    Raises
-    ------
-    ValueError
-        If molecule_columns is not specified (None).
-    FileError
-        If the file cannot be read.
-
-    Examples
-    --------
-    >>> lf = oep.scan_parquet("molecules.parquet", molecule_columns=["Molecule"])
-    >>> df = lf.collect()
+        lf = oep.scan_parquet("molecules.parquet", molecule_columns=["Molecule"])
+        df = lf.collect()
     """
     df = read_parquet(
         filepath,
@@ -236,41 +172,24 @@ def scan_oedb(
     usecols: Iterable[str] | None = None,
     numeric_columns: Iterable[str] | None = None,
 ) -> pl.LazyFrame:
-    """
-    Lazily read molecules from an OEDB file.
+    """Lazily read molecules from an OEDB file.
 
     Returns a LazyFrame for query optimization. Molecules are read eagerly
     but downstream operations (select, filter, etc.) are optimized lazily.
 
-    Parameters
-    ----------
-    filepath
-        Path to the OEDB file.
-    molecule_column
-        Name for the molecule column.
-    title_column
-        Name for the title column, or None to skip.
-    sd_data
-        Whether to read SD data tags as columns.
-    usecols
-        Specific SD tags to read (None = all).
-    numeric_columns
-        SD tag columns to convert to numeric types.
+    :param filepath: Path to the OEDB file.
+    :param molecule_column: Name for the molecule column.
+    :param title_column: Name for the title column, or None to skip.
+    :param sd_data: Whether to read SD data tags as columns.
+    :param usecols: Specific SD tags to read (None = all).
+    :param numeric_columns: SD tag columns to convert to numeric types.
+    :returns: LazyFrame with molecule column and optional SD data.
+    :raises FileError: If the file cannot be read.
 
-    Returns
-    -------
-    pl.LazyFrame
-        LazyFrame with molecule column and optional SD data.
+    Example::
 
-    Raises
-    ------
-    FileError
-        If the file cannot be read.
-
-    Examples
-    --------
-    >>> lf = oep.scan_oedb("molecules.oedb")
-    >>> df = lf.collect()
+        lf = oep.scan_oedb("molecules.oedb")
+        df = lf.collect()
     """
     df = read_oedb(
         filepath,
@@ -289,35 +208,21 @@ def scan_oedu(
     design_unit_column: str = "DesignUnit",
     title_column: str | None = "Title",
 ) -> pl.LazyFrame:
-    """
-    Lazily read design units from an OEDU file.
+    """Lazily read design units from an OEDU file.
 
     Returns a LazyFrame for query optimization. Design units are read eagerly
     but downstream operations (select, filter, etc.) are optimized lazily.
 
-    Parameters
-    ----------
-    filepath
-        Path to the OEDU file.
-    design_unit_column
-        Name for the design unit column.
-    title_column
-        Name for the title column, or None to skip.
+    :param filepath: Path to the OEDU file.
+    :param design_unit_column: Name for the design unit column.
+    :param title_column: Name for the title column, or None to skip.
+    :returns: LazyFrame with design unit column and optional title.
+    :raises FileError: If the file cannot be read.
 
-    Returns
-    -------
-    pl.LazyFrame
-        LazyFrame with design unit column and optional title.
+    Example::
 
-    Raises
-    ------
-    FileError
-        If the file cannot be read.
-
-    Examples
-    --------
-    >>> lf = oep.scan_oedu("complexes.oedu")
-    >>> df = lf.collect()
+        lf = oep.scan_oedu("complexes.oedu")
+        df = lf.collect()
     """
     df = read_oedu(
         filepath,
@@ -335,39 +240,23 @@ def scan_molecule_csv(
     drop_smiles: bool = True,
     **csv_kwargs,
 ) -> pl.LazyFrame:
-    """
-    Lazily read a CSV file and convert a SMILES column to molecules.
+    """Lazily read a CSV file and convert a SMILES column to molecules.
 
     Returns a LazyFrame for query optimization. Molecules are read eagerly
     but downstream operations (select, filter, etc.) are optimized lazily.
 
-    Parameters
-    ----------
-    filepath
-        Path to the CSV file.
-    smiles_column
-        Name of the column containing SMILES strings.
-    molecule_column
-        Name for the new molecule column.
-    drop_smiles
-        If True (default), remove the original SMILES column.
-    **csv_kwargs
-        Additional arguments passed to pl.read_csv().
+    :param filepath: Path to the CSV file.
+    :param smiles_column: Name of the column containing SMILES strings.
+    :param molecule_column: Name for the new molecule column.
+    :param drop_smiles: If True (default), remove the original SMILES column.
+    :param csv_kwargs: Additional arguments passed to ``pl.read_csv()``.
+    :returns: LazyFrame with molecule column and other CSV data.
+    :raises FileError: If the file cannot be read.
 
-    Returns
-    -------
-    pl.LazyFrame
-        LazyFrame with molecule column and other CSV data.
+    Example::
 
-    Raises
-    ------
-    FileError
-        If the file cannot be read.
-
-    Examples
-    --------
-    >>> lf = oep.scan_molecule_csv("data.csv", smiles_column="SMILES")
-    >>> df = lf.collect()
+        lf = oep.scan_molecule_csv("data.csv", smiles_column="SMILES")
+        df = lf.collect()
     """
     df = read_molecule_csv(
         filepath,

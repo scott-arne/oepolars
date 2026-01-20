@@ -4,19 +4,17 @@ import polars as pl
 
 
 class DesignUnitType(pl.BaseExtension):
-    """
-    Polars extension type for OpenEye design unit objects.
+    """Polars extension type for OpenEye design unit objects.
 
     Stores OEDesignUnit objects (protein-ligand complexes) using
     Polars' Object dtype as underlying storage.
 
-    Examples
-    --------
-    >>> from openeye import oechem
-    >>> du = oechem.OEDesignUnit()
-    >>> s = pl.Series("du", [du], dtype=DesignUnitType())
-    >>> s.dtype.ext_name()
-    'design_unit'
+    Example::
+
+        from openeye import oechem
+        du = oechem.OEDesignUnit()
+        s = pl.Series("du", [du], dtype=DesignUnitType())
+        s.dtype.ext_name()  # Returns 'design_unit'
     """
 
     def __init__(self) -> None:

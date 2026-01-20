@@ -17,32 +17,26 @@ def _is_design_unit_type(dtype: pl.DataType) -> bool:
 
 @pl.api.register_lazyframe_namespace("chem")
 class LazyFrameChemNamespace:
-    """
-    Namespace for OpenEye chemistry operations on Polars LazyFrames.
+    """Namespace for OpenEye chemistry operations on Polars LazyFrames.
 
-    Most molecule operations require eager evaluation. Use `.collect()` first
-    to convert to a DataFrame, then use `df.chem.*` methods.
+    Most molecule operations require eager evaluation. Use ``.collect()`` first
+    to convert to a DataFrame, then use ``df.chem.*`` methods.
 
-    Accessed via `lf.chem.*`.
+    Accessed via ``lf.chem.*``.
     """
 
     def __init__(self, lf: pl.LazyFrame) -> None:
         self._lf = lf
 
     def has_molecule_columns(self) -> bool:
-        """
-        Check if the LazyFrame has any molecule columns.
+        """Check if the LazyFrame has any molecule columns.
 
-        Returns
-        -------
-        bool
-            True if there are molecule columns, False otherwise.
+        :returns: True if there are molecule columns, False otherwise.
 
-        Examples
-        --------
-        >>> lf = oep.scan_sdf("molecules.sdf")
-        >>> lf.chem.has_molecule_columns()
-        True
+        Example::
+
+            lf = oep.scan_sdf("molecules.sdf")
+            lf.chem.has_molecule_columns()  # Returns True
         """
         for dtype in self._lf.collect_schema().values():
             if _is_molecule_type(dtype) or _is_design_unit_type(dtype):
@@ -50,19 +44,14 @@ class LazyFrameChemNamespace:
         return False
 
     def molecule_columns(self) -> list[str]:
-        """
-        Get list of molecule column names.
+        """Get list of molecule column names.
 
-        Returns
-        -------
-        list[str]
-            Names of columns with MoleculeType or DesignUnitType.
+        :returns: Names of columns with MoleculeType or DesignUnitType.
 
-        Examples
-        --------
-        >>> lf = oep.scan_sdf("molecules.sdf")
-        >>> lf.chem.molecule_columns()
-        ['Molecule']
+        Example::
+
+            lf = oep.scan_sdf("molecules.sdf")
+            lf.chem.molecule_columns()  # Returns ['Molecule']
         """
         cols = []
         for name, dtype in self._lf.collect_schema().items():
@@ -71,13 +60,9 @@ class LazyFrameChemNamespace:
         return cols
 
     def to_smiles(self, column: str) -> None:
-        """
-        Convert molecules to SMILES - NOT SUPPORTED on LazyFrames.
+        """Convert molecules to SMILES - NOT SUPPORTED on LazyFrames.
 
-        Raises
-        ------
-        LazyOperationError
-            Always raised. Use `.collect()` first.
+        :raises LazyOperationError: Always raised. Use ``.collect()`` first.
         """
         raise LazyOperationError(
             "to_smiles() requires eager evaluation. "
@@ -86,13 +71,9 @@ class LazyFrameChemNamespace:
         )
 
     def subsearch(self, column: str, pattern: str) -> None:
-        """
-        Substructure search - NOT SUPPORTED on LazyFrames.
+        """Substructure search - NOT SUPPORTED on LazyFrames.
 
-        Raises
-        ------
-        LazyOperationError
-            Always raised. Use `.collect()` first.
+        :raises LazyOperationError: Always raised. Use ``.collect()`` first.
         """
         raise LazyOperationError(
             "subsearch() requires eager evaluation. "
@@ -101,13 +82,9 @@ class LazyFrameChemNamespace:
         )
 
     def filter_valid(self, columns: str | list[str]) -> None:
-        """
-        Filter valid molecules - NOT SUPPORTED on LazyFrames.
+        """Filter valid molecules - NOT SUPPORTED on LazyFrames.
 
-        Raises
-        ------
-        LazyOperationError
-            Always raised. Use `.collect()` first.
+        :raises LazyOperationError: Always raised. Use ``.collect()`` first.
         """
         raise LazyOperationError(
             "filter_valid() requires eager evaluation. "
@@ -115,13 +92,9 @@ class LazyFrameChemNamespace:
         )
 
     def as_molecule(self, columns: str | list[str]) -> None:
-        """
-        Convert columns to molecules - NOT SUPPORTED on LazyFrames.
+        """Convert columns to molecules - NOT SUPPORTED on LazyFrames.
 
-        Raises
-        ------
-        LazyOperationError
-            Always raised. Use `.collect()` first.
+        :raises LazyOperationError: Always raised. Use ``.collect()`` first.
         """
         raise LazyOperationError(
             "as_molecule() requires eager evaluation. "
@@ -129,13 +102,9 @@ class LazyFrameChemNamespace:
         )
 
     def detect_molecule_columns(self) -> None:
-        """
-        Detect and convert molecule columns - NOT SUPPORTED on LazyFrames.
+        """Detect and convert molecule columns - NOT SUPPORTED on LazyFrames.
 
-        Raises
-        ------
-        LazyOperationError
-            Always raised. Use `.collect()` first.
+        :raises LazyOperationError: Always raised. Use ``.collect()`` first.
         """
         raise LazyOperationError(
             "detect_molecule_columns() requires eager evaluation. "

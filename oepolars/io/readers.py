@@ -27,41 +27,23 @@ def read_sdf(
     usecols: Iterable[str] | None = None,
     numeric_columns: Iterable[str] | None = None,
 ) -> pl.DataFrame:
-    """
-    Read molecules from an SDF file into a DataFrame.
+    """Read molecules from an SDF file into a DataFrame.
 
-    Parameters
-    ----------
-    filepath
-        Path to the SDF file.
-    flavor
-        OpenEye flavor flags for reading (OEIFlavor_SDF_*).
-    molecule_column
-        Name for the molecule column.
-    title_column
-        Name for the title column, or None to skip.
-    sd_data
-        Whether to read SD data tags as columns.
-    usecols
-        Specific SD tags to read (None = all).
-    numeric_columns
-        SD tag columns to convert to numeric types. Invalid values that cannot
-        be converted to numeric are silently converted to null.
+    :param filepath: Path to the SDF file.
+    :param flavor: OpenEye flavor flags for reading (OEIFlavor_SDF_*).
+    :param molecule_column: Name for the molecule column.
+    :param title_column: Name for the title column, or None to skip.
+    :param sd_data: Whether to read SD data tags as columns.
+    :param usecols: Specific SD tags to read (None = all).
+    :param numeric_columns: SD tag columns to convert to numeric types. Invalid values
+        that cannot be converted to numeric are silently converted to null.
+    :returns: DataFrame with molecule column and optional SD data.
+    :raises FileError: If the file cannot be read.
 
-    Returns
-    -------
-    pl.DataFrame
-        DataFrame with molecule column and optional SD data.
+    Example::
 
-    Raises
-    ------
-    FileError
-        If the file cannot be read.
-
-    Examples
-    --------
-    >>> df = oep.read_sdf("molecules.sdf")
-    >>> df = oep.read_sdf("molecules.sdf", molecule_column="Mol")
+        df = oep.read_sdf("molecules.sdf")
+        df = oep.read_sdf("molecules.sdf", molecule_column="Mol")
     """
     path = Path(filepath)
     if not path.exists():
@@ -144,40 +126,23 @@ def read_oeb(
     usecols: Iterable[str] | None = None,
     numeric_columns: Iterable[str] | None = None,
 ) -> pl.DataFrame:
-    """
-    Read molecules from an OEB file into a DataFrame.
+    """Read molecules from an OEB file into a DataFrame.
 
     OEB is OpenEye's binary format - fast and lossless.
 
-    Parameters
-    ----------
-    filepath
-        Path to the OEB file.
-    molecule_column
-        Name for the molecule column.
-    title_column
-        Name for the title column, or None to skip.
-    sd_data
-        Whether to read SD data tags as columns.
-    usecols
-        Specific SD tags to read (None = all).
-    numeric_columns
-        SD tag columns to convert to numeric types. Invalid values that cannot
-        be converted to numeric are silently converted to null.
+    :param filepath: Path to the OEB file.
+    :param molecule_column: Name for the molecule column.
+    :param title_column: Name for the title column, or None to skip.
+    :param sd_data: Whether to read SD data tags as columns.
+    :param usecols: Specific SD tags to read (None = all).
+    :param numeric_columns: SD tag columns to convert to numeric types. Invalid values
+        that cannot be converted to numeric are silently converted to null.
+    :returns: DataFrame with molecule column and optional SD data.
+    :raises FileError: If the file cannot be read.
 
-    Returns
-    -------
-    pl.DataFrame
-        DataFrame with molecule column and optional SD data.
+    Example::
 
-    Raises
-    ------
-    FileError
-        If the file cannot be read.
-
-    Examples
-    --------
-    >>> df = oep.read_oeb("molecules.oeb")
+        df = oep.read_oeb("molecules.oeb")
     """
     path = Path(filepath)
     if not path.exists():
@@ -257,38 +222,22 @@ def read_molecule_csv(
     drop_smiles: bool = True,
     **csv_kwargs,
 ) -> pl.DataFrame:
-    """
-    Read a CSV file and convert a SMILES column to molecules.
+    """Read a CSV file and convert a SMILES column to molecules.
 
     Uses Polars' native CSV reading for efficiency, then converts
     the specified SMILES column to molecules.
 
-    Parameters
-    ----------
-    filepath
-        Path to the CSV file.
-    smiles_column
-        Name of the column containing SMILES strings.
-    molecule_column
-        Name for the new molecule column.
-    drop_smiles
-        If True (default), remove the original SMILES column.
-    **csv_kwargs
-        Additional arguments passed to pl.read_csv().
+    :param filepath: Path to the CSV file.
+    :param smiles_column: Name of the column containing SMILES strings.
+    :param molecule_column: Name for the new molecule column.
+    :param drop_smiles: If True (default), remove the original SMILES column.
+    :param csv_kwargs: Additional arguments passed to ``pl.read_csv()``.
+    :returns: DataFrame with molecule column and other CSV data.
+    :raises FileError: If the file cannot be read.
 
-    Returns
-    -------
-    pl.DataFrame
-        DataFrame with molecule column and other CSV data.
+    Example::
 
-    Raises
-    ------
-    FileError
-        If the file cannot be read.
-
-    Examples
-    --------
-    >>> df = oep.read_molecule_csv("data.csv", smiles_column="SMILES")
+        df = oep.read_molecule_csv("data.csv", smiles_column="SMILES")
     """
     path = Path(filepath)
     if not path.exists():
@@ -330,34 +279,20 @@ def read_smi(
     molecule_column: str = "Molecule",
     title_column: str | None = "Title",
 ) -> pl.DataFrame:
-    """
-    Read molecules from a SMILES file into a DataFrame.
+    """Read molecules from a SMILES file into a DataFrame.
 
     SMILES files contain one molecule per line with optional title.
     Format: SMILES [whitespace] [title]
 
-    Parameters
-    ----------
-    filepath
-        Path to the SMILES file.
-    molecule_column
-        Name for the molecule column.
-    title_column
-        Name for the title column, or None to skip.
+    :param filepath: Path to the SMILES file.
+    :param molecule_column: Name for the molecule column.
+    :param title_column: Name for the title column, or None to skip.
+    :returns: DataFrame with molecule column and optional title.
+    :raises FileError: If the file cannot be read.
 
-    Returns
-    -------
-    pl.DataFrame
-        DataFrame with molecule column and optional title.
+    Example::
 
-    Raises
-    ------
-    FileError
-        If the file cannot be read.
-
-    Examples
-    --------
-    >>> df = oep.read_smi("molecules.smi")
+        df = oep.read_smi("molecules.smi")
     """
     path = Path(filepath)
     if not path.exists():
@@ -396,40 +331,23 @@ def read_oedb(
     usecols: Iterable[str] | None = None,
     numeric_columns: Iterable[str] | None = None,
 ) -> pl.DataFrame:
-    """
-    Read molecules from an OEDB file into a DataFrame.
+    """Read molecules from an OEDB file into a DataFrame.
 
     OEDB is OpenEye's database format for molecular records.
 
-    Parameters
-    ----------
-    filepath
-        Path to the OEDB file.
-    molecule_column
-        Name for the molecule column.
-    title_column
-        Name for the title column, or None to skip.
-    sd_data
-        Whether to read SD data tags as columns.
-    usecols
-        Specific SD tags to read (None = all).
-    numeric_columns
-        SD tag columns to convert to numeric types. Invalid values that cannot
-        be converted to numeric are silently converted to null.
+    :param filepath: Path to the OEDB file.
+    :param molecule_column: Name for the molecule column.
+    :param title_column: Name for the title column, or None to skip.
+    :param sd_data: Whether to read SD data tags as columns.
+    :param usecols: Specific SD tags to read (None = all).
+    :param numeric_columns: SD tag columns to convert to numeric types. Invalid values
+        that cannot be converted to numeric are silently converted to null.
+    :returns: DataFrame with molecule column and optional SD data.
+    :raises FileError: If the file cannot be read.
 
-    Returns
-    -------
-    pl.DataFrame
-        DataFrame with molecule column and optional SD data.
+    Example::
 
-    Raises
-    ------
-    FileError
-        If the file cannot be read.
-
-    Examples
-    --------
-    >>> df = oep.read_oedb("molecules.oedb")
+        df = oep.read_oedb("molecules.oedb")
     """
     path = Path(filepath)
     if not path.exists():
@@ -511,33 +429,19 @@ def read_oedu(
     design_unit_column: str = "DesignUnit",
     title_column: str | None = "Title",
 ) -> pl.DataFrame:
-    """
-    Read design units from an OEDU file into a DataFrame.
+    """Read design units from an OEDU file into a DataFrame.
 
     OEDU files contain OpenEye design units (protein-ligand complexes).
 
-    Parameters
-    ----------
-    filepath
-        Path to the OEDU file.
-    design_unit_column
-        Name for the design unit column.
-    title_column
-        Name for the title column, or None to skip.
+    :param filepath: Path to the OEDU file.
+    :param design_unit_column: Name for the design unit column.
+    :param title_column: Name for the title column, or None to skip.
+    :returns: DataFrame with design unit column and optional title.
+    :raises FileError: If the file cannot be read.
 
-    Returns
-    -------
-    pl.DataFrame
-        DataFrame with design unit column and optional title.
+    Example::
 
-    Raises
-    ------
-    FileError
-        If the file cannot be read.
-
-    Examples
-    --------
-    >>> df = oep.read_oedu("complexes.oedu")
+        df = oep.read_oedu("complexes.oedu")
     """
     path = Path(filepath)
     if not path.exists():
@@ -573,45 +477,29 @@ def read_parquet(
     molecule_columns: Iterable[str] | None = None,
     **parquet_kwargs,
 ) -> pl.DataFrame:
-    """
-    Read a Parquet file and reconstruct molecule columns from serialized binary data.
+    """Read a Parquet file and reconstruct molecule columns from serialized binary data.
 
     This function reads Parquet files that were written with
-    `df.chem.write_parquet()`, which serializes MoleculeType columns
+    ``df.chem.write_parquet()``, which serializes MoleculeType columns
     to binary OEB format. This function converts those binary columns
     back to MoleculeType.
 
-    Parameters
-    ----------
-    filepath
-        Path to the Parquet file.
-    molecule_columns
-        Column names containing serialized molecule data (Binary type).
+    :param filepath: Path to the Parquet file.
+    :param molecule_columns: Column names containing serialized molecule data (Binary type).
         This parameter is required because we cannot auto-detect which
         Binary columns were originally molecules.
-    **parquet_kwargs
-        Additional arguments passed to pl.read_parquet().
+    :param parquet_kwargs: Additional arguments passed to ``pl.read_parquet()``.
+    :returns: DataFrame with specified binary columns converted to MoleculeType.
+    :raises ValueError: If molecule_columns is not specified (None).
+    :raises FileError: If the file cannot be read.
 
-    Returns
-    -------
-    pl.DataFrame
-        DataFrame with specified binary columns converted to MoleculeType.
+    Example::
 
-    Raises
-    ------
-    ValueError
-        If molecule_columns is not specified (None).
-    FileError
-        If the file cannot be read.
-
-    Examples
-    --------
-    >>> # Write molecules to Parquet
-    >>> df.chem.write_parquet("molecules.parquet")
-    >>> # Read them back
-    >>> df_back = oep.read_parquet("molecules.parquet", molecule_columns=["Molecule"])
-    >>> df_back.schema["Molecule"].ext_name()
-    'molecule'
+        # Write molecules to Parquet
+        df.chem.write_parquet("molecules.parquet")
+        # Read them back
+        df_back = oep.read_parquet("molecules.parquet", molecule_columns=["Molecule"])
+        df_back.schema["Molecule"].ext_name()  # Returns 'molecule'
     """
     if molecule_columns is None:
         raise ValueError(

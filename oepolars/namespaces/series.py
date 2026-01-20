@@ -33,10 +33,9 @@ def _is_display_type(dtype: pl.DataType) -> bool:
 
 @pl.api.register_series_namespace("chem")
 class SeriesChemNamespace:
-    """
-    Namespace for OpenEye chemistry operations on Polars Series.
+    """Namespace for OpenEye chemistry operations on Polars Series.
 
-    Accessed via `series.chem.*`.
+    Accessed via ``series.chem.*``.
     """
 
     def __init__(self, series: pl.Series) -> None:
@@ -44,23 +43,18 @@ class SeriesChemNamespace:
 
     @property
     def metadata(self) -> dict[str, Any]:
-        """
-        Get the metadata dictionary for this Series.
+        """Get the metadata dictionary for this Series.
 
         Metadata is stored per-Series and can be used to attach arbitrary
         data (such as rendering callbacks, highlight patterns, etc.) to
         molecule Series.
 
-        Returns
-        -------
-        dict[str, Any]
-            A dictionary for storing metadata. Created on first access.
+        :returns: A dictionary for storing metadata. Created on first access.
 
-        Examples
-        --------
-        >>> s.chem.metadata["highlight"] = "c1ccccc1"
-        >>> s.chem.metadata["highlight"]
-        'c1ccccc1'
+        Example::
+
+            s.chem.metadata["highlight"] = "c1ccccc1"
+            s.chem.metadata["highlight"]  # Returns 'c1ccccc1'
         """
         series_id = id(self._series)
         if series_id not in _series_metadata:
@@ -68,32 +62,23 @@ class SeriesChemNamespace:
         return _series_metadata[series_id]
 
     def deepcopy(self) -> pl.Series:
-        """
-        Create a deep copy of the Series with independent object copies.
+        """Create a deep copy of the Series with independent object copies.
 
         This method copies both the objects (molecules or displays) and the
         associated metadata, creating a fully independent copy of the Series.
 
-        Returns
-        -------
-        pl.Series
-            A new Series with deep copies of all objects and a copy
+        :returns: A new Series with deep copies of all objects and a copy
             of the metadata dictionary.
+        :raises TypeError: If the Series is not a MoleculeType or DisplayType.
 
-        Raises
-        ------
-        TypeError
-            If the Series is not a MoleculeType or DisplayType.
+        Example::
 
-        Examples
-        --------
-        >>> copied = s.chem.deepcopy()
-        >>> # Modifying original doesn't affect copy
-        >>> # Metadata is also preserved
-        >>> s.chem.metadata["key"] = "value"
-        >>> copied = s.chem.deepcopy()
-        >>> copied.chem.metadata["key"]
-        'value'
+            copied = s.chem.deepcopy()
+            # Modifying original doesn't affect copy
+            # Metadata is also preserved
+            s.chem.metadata["key"] = "value"
+            copied = s.chem.deepcopy()
+            copied.chem.metadata["key"]  # Returns 'value'
         """
         dtype = self._series.dtype
         is_molecule = _is_molecule_type(dtype)
@@ -136,29 +121,16 @@ class SeriesChemNamespace:
         return new_series
 
     def is_valid(self) -> pl.Series:
-        """
-        Return a boolean Series indicating valid (non-null) molecules.
+        """Return a boolean Series indicating valid (non-null) molecules.
 
-        Returns
-        -------
-        pl.Series
-            Boolean Series where True indicates a valid molecule.
+        :returns: Boolean Series where True indicates a valid molecule.
+        :raises TypeError: If the Series is not a MoleculeType or DesignUnitType.
 
-        Raises
-        ------
-        TypeError
-            If the Series is not a MoleculeType or DesignUnitType.
+        Example::
 
-        Examples
-        --------
-        >>> s.chem.is_valid()
-        shape: (3,)
-        Series: 'mol' [bool]
-        [
-            true
-            false
-            true
-        ]
+            validity = s.chem.is_valid()
+            # Series: 'mol' [bool]
+            # [true, false, true]
         """
         dtype = self._series.dtype
         if not (_is_molecule_type(dtype) or _is_design_unit_type(dtype)):
@@ -169,35 +141,18 @@ class SeriesChemNamespace:
         return self._series.is_not_null()
 
     def to_smiles(self, flavor: int = oechem.OESMILESFlag_ISOMERIC) -> pl.Series:
-        """
-        Generate SMILES strings from molecules.
+        """Generate SMILES strings from molecules.
 
-        Parameters
-        ----------
-        flavor
-            SMILES generation options (bitmask from oechem.OESMILESFlag_*).
+        :param flavor: SMILES generation options (bitmask from oechem.OESMILESFlag_*).
             Default is OESMILESFlag_ISOMERIC for isomeric SMILES.
+        :returns: String Series containing SMILES representations.
+        :raises TypeError: If the Series is not a MoleculeType.
 
-        Returns
-        -------
-        pl.Series
-            String Series containing SMILES representations.
+        Example::
 
-        Raises
-        ------
-        TypeError
-            If the Series is not a MoleculeType.
-
-        Examples
-        --------
-        >>> s.chem.to_smiles()
-        shape: (3,)
-        Series: 'mol' [str]
-        [
-            "CCO"
-            "c1ccccc1"
-            "CC(=O)O"
-        ]
+            smiles = s.chem.to_smiles()
+            # Series: 'mol' [str]
+            # ["CCO", "c1ccccc1", "CC(=O)O"]
         """
         if not _is_molecule_type(self._series.dtype):
             raise TypeError(
@@ -220,39 +175,20 @@ class SeriesChemNamespace:
         *,
         adjustH: bool = False,
     ) -> pl.Series:
-        """
-        Perform substructure search on molecules.
+        """Perform substructure search on molecules.
 
-        Parameters
-        ----------
-        pattern
-            SMARTS pattern string or OESubSearch object.
-        adjustH
-            If True, adjust implicit/explicit hydrogens to match query.
+        :param pattern: SMARTS pattern string or OESubSearch object.
+        :param adjustH: If True, adjust implicit/explicit hydrogens to match query.
+        :returns: Boolean Series where True indicates a substructure match.
+        :raises TypeError: If the Series is not a MoleculeType.
+        :raises InvalidSMARTS: If the pattern is an invalid SMARTS string.
 
-        Returns
-        -------
-        pl.Series
-            Boolean Series where True indicates a substructure match.
+        Example::
 
-        Raises
-        ------
-        TypeError
-            If the Series is not a MoleculeType.
-        InvalidSMARTS
-            If the pattern is an invalid SMARTS string.
-
-        Examples
-        --------
-        >>> s.chem.subsearch("c1ccccc1")  # Find molecules with benzene ring
-        shape: (4,)
-        Series: 'mol' [bool]
-        [
-            false
-            true
-            false
-            true
-        ]
+            # Find molecules with benzene ring
+            has_benzene = s.chem.subsearch("c1ccccc1")
+            # Series: 'mol' [bool]
+            # [false, true, false, true]
         """
         if not _is_molecule_type(self._series.dtype):
             raise TypeError(
@@ -278,23 +214,15 @@ class SeriesChemNamespace:
         ).fill_null(False)
 
     def copy_molecules(self) -> pl.Series:
-        """
-        Create deep copies of all molecules in the Series.
+        """Create deep copies of all molecules in the Series.
 
-        Returns
-        -------
-        pl.Series
-            New Series with independent copies of each molecule.
+        :returns: New Series with independent copies of each molecule.
+        :raises TypeError: If the Series is not a MoleculeType.
 
-        Raises
-        ------
-        TypeError
-            If the Series is not a MoleculeType.
+        Example::
 
-        Examples
-        --------
-        >>> copied = s.chem.copy_molecules()
-        >>> # Modifying original doesn't affect copy
+            copied = s.chem.copy_molecules()
+            # Modifying original doesn't affect copy
         """
         if not _is_molecule_type(self._series.dtype):
             raise TypeError(
@@ -310,18 +238,10 @@ class SeriesChemNamespace:
         return pl.Series(self._series.name, copied, dtype=MoleculeType())
 
     def copy_design_units(self) -> pl.Series:
-        """
-        Create deep copies of all design units in the Series.
+        """Create deep copies of all design units in the Series.
 
-        Returns
-        -------
-        pl.Series
-            New Series with independent copies of each design unit.
-
-        Raises
-        ------
-        TypeError
-            If the Series is not a DesignUnitType.
+        :returns: New Series with independent copies of each design unit.
+        :raises TypeError: If the Series is not a DesignUnitType.
         """
         if not _is_design_unit_type(self._series.dtype):
             raise TypeError(
@@ -337,23 +257,11 @@ class SeriesChemNamespace:
         return pl.Series(self._series.name, copied, dtype=DesignUnitType())
 
     def get_ligands(self, *, clear_titles: bool = False) -> pl.Series:
-        """
-        Extract ligand molecules from design units.
+        """Extract ligand molecules from design units.
 
-        Parameters
-        ----------
-        clear_titles
-            If True, clear the titles of extracted ligands.
-
-        Returns
-        -------
-        pl.Series
-            MoleculeType Series containing ligand molecules.
-
-        Raises
-        ------
-        TypeError
-            If the Series is not a DesignUnitType.
+        :param clear_titles: If True, clear the titles of extracted ligands.
+        :returns: MoleculeType Series containing ligand molecules.
+        :raises TypeError: If the Series is not a DesignUnitType.
         """
         if not _is_design_unit_type(self._series.dtype):
             raise TypeError(
@@ -374,23 +282,11 @@ class SeriesChemNamespace:
         return pl.Series(self._series.name, ligands, dtype=MoleculeType())
 
     def get_proteins(self, *, clear_titles: bool = False) -> pl.Series:
-        """
-        Extract protein molecules from design units.
+        """Extract protein molecules from design units.
 
-        Parameters
-        ----------
-        clear_titles
-            If True, clear the titles of extracted proteins.
-
-        Returns
-        -------
-        pl.Series
-            MoleculeType Series containing protein molecules.
-
-        Raises
-        ------
-        TypeError
-            If the Series is not a DesignUnitType.
+        :param clear_titles: If True, clear the titles of extracted proteins.
+        :returns: MoleculeType Series containing protein molecules.
+        :raises TypeError: If the Series is not a DesignUnitType.
         """
         if not _is_design_unit_type(self._series.dtype):
             raise TypeError(
@@ -411,23 +307,11 @@ class SeriesChemNamespace:
         return pl.Series(self._series.name, proteins, dtype=MoleculeType())
 
     def get_components(self, mask: int) -> pl.Series:
-        """
-        Extract components from design units by mask.
+        """Extract components from design units by mask.
 
-        Parameters
-        ----------
-        mask
-            Component mask from oechem.OEDesignUnitComponents_*.
-
-        Returns
-        -------
-        pl.Series
-            MoleculeType Series containing extracted components.
-
-        Raises
-        ------
-        TypeError
-            If the Series is not a DesignUnitType.
+        :param mask: Component mask from oechem.OEDesignUnitComponents_*.
+        :returns: MoleculeType Series containing extracted components.
+        :raises TypeError: If the Series is not a DesignUnitType.
         """
         if not _is_design_unit_type(self._series.dtype):
             raise TypeError(
