@@ -1,10 +1,19 @@
 """Series namespace for OpenEye operations."""
 
+import copy
+from typing import Any
+
 import polars as pl
 from openeye import oechem
 
 from oepolars.exceptions import InvalidSMARTS
 from oepolars.types import DesignUnitType, MoleculeType
+
+
+# Dictionary to store metadata for Series objects, keyed by object id.
+# Note: This is keyed by id() which means metadata persists as long as
+# the Series object exists (no automatic cleanup when Series is garbage collected).
+_series_metadata: dict[int, dict[str, Any]] = {}
 
 
 def _is_molecule_type(dtype: pl.DataType) -> bool:
@@ -27,6 +36,81 @@ class SeriesChemNamespace:
 
     def __init__(self, series: pl.Series) -> None:
         self._series = series
+
+    @property
+    def metadata(self) -> dict[str, Any]:
+        """
+        Get the metadata dictionary for this Series.
+
+        Metadata is stored per-Series and can be used to attach arbitrary
+        data (such as rendering callbacks, highlight patterns, etc.) to
+        molecule Series.
+
+        Returns
+        -------
+        dict[str, Any]
+            A dictionary for storing metadata. Created on first access.
+
+        Examples
+        --------
+        >>> s.chem.metadata["highlight"] = "c1ccccc1"
+        >>> s.chem.metadata["highlight"]
+        'c1ccccc1'
+        """
+        series_id = id(self._series)
+        if series_id not in _series_metadata:
+            _series_metadata[series_id] = {}
+        return _series_metadata[series_id]
+
+    def deepcopy(self) -> pl.Series:
+        """
+        Create a deep copy of the Series with independent molecule copies.
+
+        This method copies both the molecules and the associated metadata,
+        creating a fully independent copy of the Series.
+
+        Returns
+        -------
+        pl.Series
+            A new Series with deep copies of all molecules and a copy
+            of the metadata dictionary.
+
+        Raises
+        ------
+        TypeError
+            If the Series is not a MoleculeType.
+
+        Examples
+        --------
+        >>> copied = s.chem.deepcopy()
+        >>> # Modifying original doesn't affect copy
+        >>> # Metadata is also preserved
+        >>> s.chem.metadata["key"] = "value"
+        >>> copied = s.chem.deepcopy()
+        >>> copied.chem.metadata["key"]
+        'value'
+        """
+        if not _is_molecule_type(self._series.dtype):
+            raise TypeError(
+                f"deepcopy() requires MoleculeType, got {self._series.dtype}"
+            )
+
+        def copy_mol(mol: oechem.OEMolBase | None) -> oechem.OEMol | None:
+            if mol is None:
+                return None
+            return oechem.OEMol(mol)
+
+        copied = [copy_mol(mol) for mol in self._series.to_list()]
+        new_series = pl.Series(self._series.name, copied, dtype=MoleculeType())
+
+        # Copy metadata to the new series
+        series_id = id(self._series)
+        if series_id in _series_metadata:
+            _series_metadata[id(new_series)] = copy.deepcopy(
+                _series_metadata[series_id]
+            )
+
+        return new_series
 
     def is_valid(self) -> pl.Series:
         """
