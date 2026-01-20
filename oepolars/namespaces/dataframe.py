@@ -69,10 +69,9 @@ def _is_likely_smiles(val: str) -> bool:
 
 @pl.api.register_dataframe_namespace("chem")
 class DataFrameChemNamespace:
-    """
-    Namespace for OpenEye chemistry operations on Polars DataFrames.
+    """Namespace for OpenEye chemistry operations on Polars DataFrames.
 
-    Accessed via `df.chem.*`.
+    Accessed via ``df.chem.*``.
     """
 
     def __init__(self, df: pl.DataFrame) -> None:
@@ -84,30 +83,17 @@ class DataFrameChemNamespace:
         *,
         molecule_format: int | None = None,
     ) -> pl.DataFrame:
-        """
-        Convert column(s) to MoleculeType.
+        """Convert column(s) to MoleculeType.
 
-        Parameters
-        ----------
-        columns
-            Column name or list of column names to convert.
-        molecule_format
-            OpenEye format constant for parsing. Default assumes SMILES.
+        :param columns: Column name or list of column names to convert.
+        :param molecule_format: OpenEye format constant for parsing. Default assumes SMILES.
+        :returns: DataFrame with specified columns converted to MoleculeType.
+        :raises KeyError: If a specified column does not exist.
 
-        Returns
-        -------
-        pl.DataFrame
-            DataFrame with specified columns converted to MoleculeType.
+        Example::
 
-        Raises
-        ------
-        KeyError
-            If a specified column does not exist.
-
-        Examples
-        --------
-        >>> df = pl.DataFrame({"smiles": ["CCO", "c1ccccc1"]})
-        >>> df.chem.as_molecule("smiles")
+            df = pl.DataFrame({"smiles": ["CCO", "c1ccccc1"]})
+            df.chem.as_molecule("smiles")
         """
         columns = [columns] if isinstance(columns, str) else list(columns)
 
@@ -159,28 +145,16 @@ class DataFrameChemNamespace:
         return result
 
     def filter_valid(self, columns: str | Iterable[str]) -> pl.DataFrame:
-        """
-        Filter out rows with null molecules in specified columns.
+        """Filter out rows with null molecules in specified columns.
 
-        Parameters
-        ----------
-        columns
-            Column name or list of column names to check for validity.
+        :param columns: Column name or list of column names to check for validity.
+        :returns: DataFrame with rows containing null molecules removed.
+        :raises KeyError: If a specified column does not exist.
 
-        Returns
-        -------
-        pl.DataFrame
-            DataFrame with rows containing null molecules removed.
+        Example::
 
-        Raises
-        ------
-        KeyError
-            If a specified column does not exist.
-
-        Examples
-        --------
-        >>> df.chem.filter_valid("Molecule")
-        >>> df.chem.filter_valid(["Molecule", "Ligand"])
+            df.chem.filter_valid("Molecule")
+            df.chem.filter_valid(["Molecule", "Ligand"])
         """
         columns = [columns] if isinstance(columns, str) else list(columns)
 
@@ -197,27 +171,18 @@ class DataFrameChemNamespace:
         return self._df.filter(filter_expr)
 
     def detect_molecule_columns(self, *, sample_size: int = 25) -> pl.DataFrame:
-        """
-        Auto-detect and convert molecule columns.
+        """Auto-detect and convert molecule columns.
 
-        Samples values from Object and String columns to detect:
-        - OpenEye molecule objects (OEMolBase subclasses)
-        - SMILES strings (validated by parsing)
+        Samples values from Object and String columns to detect OpenEye molecule
+        objects (OEMolBase subclasses) and SMILES strings (validated by parsing).
 
-        Parameters
-        ----------
-        sample_size
-            Maximum number of non-null values to sample per column.
+        :param sample_size: Maximum number of non-null values to sample per column.
+        :returns: DataFrame with detected molecule columns converted.
 
-        Returns
-        -------
-        pl.DataFrame
-            DataFrame with detected molecule columns converted.
+        Example::
 
-        Examples
-        --------
-        >>> df = pl.DataFrame({"smiles": ["CCO", "c1ccccc1"]})
-        >>> df.chem.detect_molecule_columns()
+            df = pl.DataFrame({"smiles": ["CCO", "c1ccccc1"]})
+            df.chem.detect_molecule_columns()
         """
         result = self._df.clone()
         columns_to_convert: list[str] = []
@@ -269,33 +234,20 @@ class DataFrameChemNamespace:
         sd_columns: Iterable[str] | None = None,
         flavor: int | None = None,
     ) -> None:
-        """
-        Write molecules to an SDF file.
+        """Write molecules to an SDF file.
 
-        Parameters
-        ----------
-        filepath
-            Path to output SDF file.
-        molecule_column
-            Name of the column containing molecules.
-        title_column
-            Column to use for molecule titles (optional).
-        sd_columns
-            Columns to write as SD data tags (optional).
-        flavor
-            OpenEye flavor flags for writing.
+        :param filepath: Path to output SDF file.
+        :param molecule_column: Name of the column containing molecules.
+        :param title_column: Column to use for molecule titles.
+        :param sd_columns: Columns to write as SD data tags.
+        :param flavor: OpenEye flavor flags for writing.
+        :raises KeyError: If molecule_column does not exist.
+        :raises TypeError: If molecule_column is not MoleculeType.
 
-        Raises
-        ------
-        KeyError
-            If molecule_column does not exist.
-        TypeError
-            If molecule_column is not MoleculeType.
+        Example::
 
-        Examples
-        --------
-        >>> df.chem.write_sdf("output.sdf", molecule_column="Molecule")
-        >>> df.chem.write_sdf("output.sdf", molecule_column="Mol", sd_columns=["MW", "LogP"])
+            df.chem.write_sdf("output.sdf", molecule_column="Molecule")
+            df.chem.write_sdf("output.sdf", molecule_column="Mol", sd_columns=["MW", "LogP"])
         """
         if molecule_column not in self._df.columns:
             raise KeyError(f"Column not found: {molecule_column}")
@@ -347,30 +299,18 @@ class DataFrameChemNamespace:
         title_column: str | None = None,
         flavor: int | None = None,
     ) -> None:
-        """
-        Write molecules to a SMILES file.
+        """Write molecules to a SMILES file.
 
-        Parameters
-        ----------
-        filepath
-            Path to output SMILES file.
-        molecule_column
-            Name of the column containing molecules.
-        title_column
-            Column to use for molecule titles (optional).
-        flavor
-            OpenEye flavor flags for SMILES writing.
+        :param filepath: Path to output SMILES file.
+        :param molecule_column: Name of the column containing molecules.
+        :param title_column: Column to use for molecule titles.
+        :param flavor: OpenEye flavor flags for SMILES writing.
+        :raises KeyError: If molecule_column does not exist.
+        :raises TypeError: If molecule_column is not MoleculeType.
 
-        Raises
-        ------
-        KeyError
-            If molecule_column does not exist.
-        TypeError
-            If molecule_column is not MoleculeType.
+        Example::
 
-        Examples
-        --------
-        >>> df.chem.write_smi("output.smi", molecule_column="Molecule")
+            df.chem.write_smi("output.smi", molecule_column="Molecule")
         """
         if molecule_column not in self._df.columns:
             raise KeyError(f"Column not found: {molecule_column}")
@@ -413,36 +353,22 @@ class DataFrameChemNamespace:
         drop_molecule: bool = True,
         **csv_kwargs,
     ) -> None:
-        """
-        Write DataFrame to CSV with molecules as SMILES strings.
+        """Write DataFrame to CSV with molecules as SMILES strings.
 
         Converts the molecule column to SMILES and writes as CSV.
 
-        Parameters
-        ----------
-        filepath
-            Path to output CSV file.
-        molecule_column
-            Name of the column containing molecules.
-        smiles_column
-            Name for the SMILES column in output.
-        smiles_flavor
-            OpenEye SMILES flavor flags.
-        drop_molecule
-            If True, remove the molecule column from output.
-        **csv_kwargs
-            Additional arguments passed to pl.DataFrame.write_csv().
+        :param filepath: Path to output CSV file.
+        :param molecule_column: Name of the column containing molecules.
+        :param smiles_column: Name for the SMILES column in output.
+        :param smiles_flavor: OpenEye SMILES flavor flags.
+        :param drop_molecule: If True, remove the molecule column from output.
+        :param csv_kwargs: Additional arguments passed to ``pl.DataFrame.write_csv()``.
+        :raises KeyError: If molecule_column does not exist.
+        :raises TypeError: If molecule_column is not MoleculeType.
 
-        Raises
-        ------
-        KeyError
-            If molecule_column does not exist.
-        TypeError
-            If molecule_column is not MoleculeType.
+        Example::
 
-        Examples
-        --------
-        >>> df.chem.write_molecule_csv("output.csv", molecule_column="Molecule")
+            df.chem.write_molecule_csv("output.csv", molecule_column="Molecule")
         """
         if molecule_column not in self._df.columns:
             raise KeyError(f"Column not found: {molecule_column}")
@@ -484,30 +410,18 @@ class DataFrameChemNamespace:
         title_column: str | None = None,
         sd_columns: Iterable[str] | None = None,
     ) -> None:
-        """
-        Write molecules to an OEB (OpenEye binary) file.
+        """Write molecules to an OEB (OpenEye binary) file.
 
-        Parameters
-        ----------
-        filepath
-            Path to output OEB file.
-        molecule_column
-            Name of the column containing molecules.
-        title_column
-            Column to use for molecule titles (optional).
-        sd_columns
-            Columns to write as SD data tags (optional).
+        :param filepath: Path to output OEB file.
+        :param molecule_column: Name of the column containing molecules.
+        :param title_column: Column to use for molecule titles.
+        :param sd_columns: Columns to write as SD data tags.
+        :raises KeyError: If molecule_column does not exist.
+        :raises TypeError: If molecule_column is not MoleculeType.
 
-        Raises
-        ------
-        KeyError
-            If molecule_column does not exist.
-        TypeError
-            If molecule_column is not MoleculeType.
+        Example::
 
-        Examples
-        --------
-        >>> df.chem.write_oeb("output.oeb", molecule_column="Molecule")
+            df.chem.write_oeb("output.oeb", molecule_column="Molecule")
         """
         if molecule_column not in self._df.columns:
             raise KeyError(f"Column not found: {molecule_column}")
@@ -552,27 +466,21 @@ class DataFrameChemNamespace:
         molecule_columns: Iterable[str] | None = None,
         **parquet_kwargs,
     ) -> None:
-        """
-        Write DataFrame to Parquet with molecules serialized to binary OEB format.
+        """Write DataFrame to Parquet with molecules serialized to binary OEB format.
 
         Molecule columns are converted to binary (bytes) using OEB format before
         writing, allowing the data to be stored in standard Parquet files.
 
-        Parameters
-        ----------
-        filepath
-            Path to output Parquet file.
-        molecule_columns
-            Column names to serialize as molecules. If None, auto-detects all
-            MoleculeType columns.
-        **parquet_kwargs
-            Additional arguments passed to pl.DataFrame.write_parquet().
+        :param filepath: Path to output Parquet file.
+        :param molecule_columns: Column names to serialize as molecules. If None,
+            auto-detects all MoleculeType columns.
+        :param parquet_kwargs: Additional arguments passed to ``pl.DataFrame.write_parquet()``.
 
-        Examples
-        --------
-        >>> df.chem.write_parquet("output.parquet")
-        >>> df.chem.write_parquet("output.parquet", molecule_columns=["Mol1"])
-        >>> df.chem.write_parquet("output.parquet", compression="snappy")
+        Example::
+
+            df.chem.write_parquet("output.parquet")
+            df.chem.write_parquet("output.parquet", molecule_columns=["Mol1"])
+            df.chem.write_parquet("output.parquet", compression="snappy")
         """
         # Auto-detect molecule columns if not specified
         if molecule_columns is None:
@@ -614,30 +522,18 @@ class DataFrameChemNamespace:
         title_column: str | None = None,
         sd_columns: Iterable[str] | None = None,
     ) -> None:
-        """
-        Write molecules to an OEDB (OpenEye database) file.
+        """Write molecules to an OEDB (OpenEye database) file.
 
-        Parameters
-        ----------
-        filepath
-            Path to output OEDB file.
-        molecule_column
-            Name of the column containing molecules.
-        title_column
-            Column to use for molecule titles (optional).
-        sd_columns
-            Columns to write as SD data tags (optional).
+        :param filepath: Path to output OEDB file.
+        :param molecule_column: Name of the column containing molecules.
+        :param title_column: Column to use for molecule titles.
+        :param sd_columns: Columns to write as SD data tags.
+        :raises KeyError: If molecule_column does not exist.
+        :raises TypeError: If molecule_column is not MoleculeType.
 
-        Raises
-        ------
-        KeyError
-            If molecule_column does not exist.
-        TypeError
-            If molecule_column is not MoleculeType.
+        Example::
 
-        Examples
-        --------
-        >>> df.chem.write_oedb("output.oedb", molecule_column="Molecule")
+            df.chem.write_oedb("output.oedb", molecule_column="Molecule")
         """
         if molecule_column not in self._df.columns:
             raise KeyError(f"Column not found: {molecule_column}")
@@ -686,28 +582,17 @@ class DataFrameChemNamespace:
         design_unit_column: str,
         title_column: str | None = None,
     ) -> None:
-        """
-        Write design units to an OEDU file.
+        """Write design units to an OEDU file.
 
-        Parameters
-        ----------
-        filepath
-            Path to output OEDU file.
-        design_unit_column
-            Name of the column containing design units.
-        title_column
-            Column to use for design unit titles (optional).
+        :param filepath: Path to output OEDU file.
+        :param design_unit_column: Name of the column containing design units.
+        :param title_column: Column to use for design unit titles.
+        :raises KeyError: If design_unit_column does not exist.
+        :raises TypeError: If design_unit_column is not DesignUnitType.
 
-        Raises
-        ------
-        KeyError
-            If design_unit_column does not exist.
-        TypeError
-            If design_unit_column is not DesignUnitType.
+        Example::
 
-        Examples
-        --------
-        >>> df.chem.write_oedu("output.oedu", design_unit_column="DesignUnit")
+            df.chem.write_oedu("output.oedu", design_unit_column="DesignUnit")
         """
         if design_unit_column not in self._df.columns:
             raise KeyError(f"Column not found: {design_unit_column}")
