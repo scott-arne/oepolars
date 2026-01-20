@@ -4,10 +4,10 @@ import copy
 from typing import Any
 
 import polars as pl
-from openeye import oechem
+from openeye import oechem, oedepict
 
 from oepolars.exceptions import InvalidSMARTS
-from oepolars.types import DesignUnitType, MoleculeType
+from oepolars.types import DesignUnitType, DisplayType, MoleculeType
 
 
 # Dictionary to store metadata for Series objects, keyed by object id.
@@ -24,6 +24,11 @@ def _is_molecule_type(dtype: pl.DataType) -> bool:
 def _is_design_unit_type(dtype: pl.DataType) -> bool:
     """Check if dtype is DesignUnitType."""
     return hasattr(dtype, "ext_name") and dtype.ext_name() == "design_unit"
+
+
+def _is_display_type(dtype: pl.DataType) -> bool:
+    """Check if dtype is DisplayType."""
+    return hasattr(dtype, "ext_name") and dtype.ext_name() == "display"
 
 
 @pl.api.register_series_namespace("chem")
@@ -64,21 +69,21 @@ class SeriesChemNamespace:
 
     def deepcopy(self) -> pl.Series:
         """
-        Create a deep copy of the Series with independent molecule copies.
+        Create a deep copy of the Series with independent object copies.
 
-        This method copies both the molecules and the associated metadata,
-        creating a fully independent copy of the Series.
+        This method copies both the objects (molecules or displays) and the
+        associated metadata, creating a fully independent copy of the Series.
 
         Returns
         -------
         pl.Series
-            A new Series with deep copies of all molecules and a copy
+            A new Series with deep copies of all objects and a copy
             of the metadata dictionary.
 
         Raises
         ------
         TypeError
-            If the Series is not a MoleculeType.
+            If the Series is not a MoleculeType or DisplayType.
 
         Examples
         --------
@@ -90,18 +95,36 @@ class SeriesChemNamespace:
         >>> copied.chem.metadata["key"]
         'value'
         """
-        if not _is_molecule_type(self._series.dtype):
+        dtype = self._series.dtype
+        is_molecule = _is_molecule_type(dtype)
+        is_display = _is_display_type(dtype)
+
+        if not (is_molecule or is_display):
             raise TypeError(
-                f"deepcopy() requires MoleculeType, got {self._series.dtype}"
+                f"deepcopy() requires MoleculeType or DisplayType, got {dtype}"
             )
 
-        def copy_mol(mol: oechem.OEMolBase | None) -> oechem.OEMol | None:
-            if mol is None:
-                return None
-            return oechem.OEMol(mol)
+        if is_molecule:
 
-        copied = [copy_mol(mol) for mol in self._series.to_list()]
-        new_series = pl.Series(self._series.name, copied, dtype=MoleculeType())
+            def copy_mol(mol: oechem.OEMolBase | None) -> oechem.OEMol | None:
+                if mol is None:
+                    return None
+                return oechem.OEMol(mol)
+
+            copied = [copy_mol(mol) for mol in self._series.to_list()]
+            new_series = pl.Series(self._series.name, copied, dtype=MoleculeType())
+
+        else:  # is_display
+
+            def copy_disp(
+                disp: oedepict.OE2DMolDisplay | None,
+            ) -> oedepict.OE2DMolDisplay | None:
+                if disp is None:
+                    return None
+                return oedepict.OE2DMolDisplay(disp)
+
+            copied = [copy_disp(disp) for disp in self._series.to_list()]
+            new_series = pl.Series(self._series.name, copied, dtype=DisplayType())
 
         # Copy metadata to the new series
         series_id = id(self._series)
