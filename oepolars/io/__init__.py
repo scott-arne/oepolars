@@ -1,5 +1,6 @@
 """File I/O functions for OEPolars."""
 
+from oepolars.io.pandas import from_pandas
 from oepolars.io.readers import (
     read_molecule_csv,
     read_oeb,
@@ -20,6 +21,7 @@ from oepolars.io.scanners import (
 )
 
 __all__ = [
+    "from_pandas",
     "read_molecule_csv",
     "read_oeb",
     "read_oedb",

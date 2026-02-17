@@ -7,7 +7,7 @@ from pathlib import Path
 import polars as pl
 from openeye import oechem
 
-from oepolars.types import MoleculeType
+from oepolars.types import DesignUnitType, MoleculeType
 from oepolars.util import mol_to_bytes
 
 log = logging.getLogger("oepolars")
@@ -141,6 +141,51 @@ class DataFrameChemNamespace:
 
             new_col = pl.Series(col, molecules, dtype=MoleculeType())
             result = result.with_columns(new_col)
+
+        return result
+
+    def as_design_unit(
+        self,
+        columns: str | Iterable[str],
+    ) -> pl.DataFrame:
+        """Convert column(s) to DesignUnitType.
+
+        Converts Object columns containing OEDesignUnit instances to the
+        DesignUnitType extension type for proper rendering and serialization.
+
+        :param columns: Column name or list of column names to convert.
+        :returns: DataFrame with specified columns converted to DesignUnitType.
+        :raises KeyError: If a specified column does not exist.
+
+        Example::
+
+            df = pl.DataFrame({"DesignUnit": [du1, du2]})
+            df.chem.as_design_unit("DesignUnit")
+        """
+        columns = [columns] if isinstance(columns, str) else list(columns)
+
+        # Validate columns exist
+        for col in columns:
+            if col not in self._df.columns:
+                raise KeyError(f"Column '{col}' not found in DataFrame")
+
+        result = self._df.clone()
+
+        for col in columns:
+            # Skip if already DesignUnitType
+            if _is_design_unit_type(result.schema[col]):
+                continue
+
+            col_values = result[col].to_list()
+
+            # Object column containing OEDesignUnit objects
+            if result.schema[col] == pl.Object:
+                design_units = [
+                    oechem.OEDesignUnit(v) if isinstance(v, oechem.OEDesignUnit) else None
+                    for v in col_values
+                ]
+                new_col = pl.Series(col, design_units, dtype=DesignUnitType())
+                result = result.with_columns(new_col)
 
         return result
 

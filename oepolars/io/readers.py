@@ -17,87 +17,83 @@ log = logging.getLogger("oepolars")
 FilePath = str | Path
 
 
-def read_sdf(
-    filepath: FilePath,
-    *,
-    flavor: int | None = None,
-    molecule_column: str = "Molecule",
-    title_column: str | None = "Title",
-    sd_data: bool = True,
-    usecols: Iterable[str] | None = None,
-    numeric_columns: Iterable[str] | None = None,
-) -> pl.DataFrame:
-    """Read molecules from an SDF file into a DataFrame.
+def _validate_path(filepath: FilePath) -> Path:
+    """Validate that a file path exists and return as Path object.
 
-    :param filepath: Path to the SDF file.
-    :param flavor: OpenEye flavor flags for reading (OEIFlavor_SDF_*).
-    :param molecule_column: Name for the molecule column.
-    :param title_column: Name for the title column, or None to skip.
-    :param sd_data: Whether to read SD data tags as columns.
-    :param usecols: Specific SD tags to read (None = all).
-    :param numeric_columns: SD tag columns to convert to numeric types. Invalid values
-        that cannot be converted to numeric are silently converted to null.
-    :returns: DataFrame with molecule column and optional SD data.
-    :raises FileError: If the file cannot be read.
-
-    Example::
-
-        df = oep.read_sdf("molecules.sdf")
-        df = oep.read_sdf("molecules.sdf", molecule_column="Mol")
+    :param filepath: Path to validate.
+    :returns: Validated Path object.
+    :raises FileError: If the file does not exist.
     """
     path = Path(filepath)
     if not path.exists():
         raise FileError(f"File not found: {filepath}")
+    return path
 
-    # Prepare usecols as a set if provided
-    usecols_set = set(usecols) if usecols is not None else None
 
-    # Read molecules
-    molecules = []
-    titles = []
-    sd_data_dict: dict[str, list] = {}
+def _collect_sd_data(
+    mol: oechem.OEMolBase,
+    sd_data_dict: dict[str, list],
+    molecule_count: int,
+    usecols_set: set[str] | None,
+) -> None:
+    """Collect SD data from a molecule into the sd_data_dict.
 
-    ifs = oechem.oemolistream(str(path))
-    if flavor is not None:
-        ifs.SetFlavor(oechem.OEFormat_SDF, flavor)
+    SD data may be stored on the molecule (OEB format) or on the active
+    conformer (SDF format), so we check both locations.
 
-    mol = oechem.OEGraphMol()
-    while oechem.OEReadMolecule(ifs, mol):
-        # Make a copy to store (OEMol preserves SD data)
-        molecules.append(oechem.OEMol(mol))
-        titles.append(mol.GetTitle())
+    :param mol: Molecule to extract SD data from.
+    :param sd_data_dict: Dictionary to store SD data (modified in place).
+    :param molecule_count: Current count of molecules (for backfilling).
+    :param usecols_set: Set of column names to include, or None for all.
+    """
+    # Try molecule-level SD data first (OEB format), then conformer-level (SDF format)
+    sd_pairs = list(oechem.OEGetSDDataPairs(mol))
+    if not sd_pairs and isinstance(mol, oechem.OEMol):
+        sd_pairs = list(oechem.OEGetSDDataPairs(mol.GetActive()))
 
-        # Read SD data
-        if sd_data:
-            for dp in oechem.OEGetSDDataPairs(mol):
-                tag = dp.GetTag()
-                value = dp.GetValue()
+    for dp in sd_pairs:
+        tag = dp.GetTag()
+        value = dp.GetValue()
 
-                # Skip if not in usecols
-                if usecols_set is not None and tag not in usecols_set:
-                    continue
+        # Skip if not in usecols
+        if usecols_set is not None and tag not in usecols_set:
+            continue
 
-                if tag not in sd_data_dict:
-                    # Backfill with None for previous molecules
-                    sd_data_dict[tag] = [None] * (len(molecules) - 1)
+        if tag not in sd_data_dict:
+            # Backfill with None for previous molecules
+            sd_data_dict[tag] = [None] * (molecule_count - 1)
 
-                sd_data_dict[tag].append(value)
+        sd_data_dict[tag].append(value)
 
-            # Fill missing tags with None
-            for tag in sd_data_dict:
-                if len(sd_data_dict[tag]) < len(molecules):
-                    sd_data_dict[tag].append(None)
+    # Fill missing tags with None
+    for tag in sd_data_dict:
+        if len(sd_data_dict[tag]) < molecule_count:
+            sd_data_dict[tag].append(None)
 
-    ifs.close()
 
-    log.debug(f"Read {len(molecules)} molecules from {filepath}")
+def _build_molecule_dataframe(
+    molecules: list,
+    titles: list | None,
+    sd_data_dict: dict[str, list],
+    molecule_column: str,
+    title_column: str | None,
+    numeric_columns: Iterable[str] | None,
+) -> pl.DataFrame:
+    """Build a DataFrame from molecules, titles, and SD data.
 
-    # Build DataFrame
+    :param molecules: List of molecule objects.
+    :param titles: List of titles, or None if not reading titles.
+    :param sd_data_dict: Dictionary of SD tag data.
+    :param molecule_column: Name for the molecule column.
+    :param title_column: Name for the title column, or None to skip.
+    :param numeric_columns: Columns to convert to numeric types.
+    :returns: Constructed DataFrame.
+    """
     data: dict[str, pl.Series] = {
         molecule_column: pl.Series(molecules, dtype=MoleculeType()),
     }
 
-    if title_column is not None:
+    if titles is not None and title_column is not None:
         data[title_column] = pl.Series(titles, dtype=pl.String)
 
     # Add SD data columns
@@ -117,6 +113,67 @@ def read_sdf(
     return df
 
 
+def read_sdf(
+    filepath: FilePath,
+    *,
+    flavor: int | None = None,
+    molecule_column: str = "Molecule",
+    title_column: str | None = "Title",
+    sd_data: bool = True,
+    usecols: Iterable[str] | None = None,
+    numeric_columns: Iterable[str] | None = None,
+    no_title: bool = False
+) -> pl.DataFrame:
+    """Read molecules from an SDF file into a DataFrame.
+
+    :param filepath: Path to the SDF file.
+    :param flavor: OpenEye flavor flags for reading (OEIFlavor_SDF_*).
+    :param molecule_column: Name for the molecule column.
+    :param title_column: Name for the title column, or None to skip.
+    :param sd_data: Whether to read SD data tags as columns.
+    :param usecols: Specific SD tags to read (None = all).
+    :param numeric_columns: SD tag columns to convert to numeric types. Invalid values
+        that cannot be converted to numeric are silently converted to null.
+    :param no_title: Do not read molecule titles.
+    :returns: DataFrame with molecule column and optional SD data.
+    :raises FileError: If the file cannot be read.
+
+    Example::
+
+        df = oep.read_sdf("molecules.sdf")
+        df = oep.read_sdf("molecules.sdf", molecule_column="Mol")
+    """
+    path = _validate_path(filepath)
+    usecols_set = set(usecols) if usecols is not None else None
+
+    molecules = []
+    titles = None if no_title else []
+    sd_data_dict: dict[str, list] = {}
+
+    with oechem.oemolistream(str(path)) as ifs:
+        if flavor is not None:
+            ifs.SetFlavor(oechem.OEFormat_SDF, flavor)
+
+        for mol in ifs.GetOEMols():
+            if no_title:
+                mol.SetTitle('')
+                mol.GetActive().SetTitle('')
+
+            molecules.append(oechem.OEMol(mol))
+
+            if not no_title:
+                titles.append(mol.GetTitle())
+
+            if sd_data:
+                _collect_sd_data(mol, sd_data_dict, len(molecules), usecols_set)
+
+    log.debug(f"Read {len(molecules)} molecules from {filepath}")
+
+    return _build_molecule_dataframe(
+        molecules, titles, sd_data_dict, molecule_column, title_column, numeric_columns
+    )
+
+
 def read_oeb(
     filepath: FilePath,
     *,
@@ -125,6 +182,7 @@ def read_oeb(
     sd_data: bool = True,
     usecols: Iterable[str] | None = None,
     numeric_columns: Iterable[str] | None = None,
+    no_title: bool = False,
 ) -> pl.DataFrame:
     """Read molecules from an OEB file into a DataFrame.
 
@@ -137,6 +195,7 @@ def read_oeb(
     :param usecols: Specific SD tags to read (None = all).
     :param numeric_columns: SD tag columns to convert to numeric types. Invalid values
         that cannot be converted to numeric are silently converted to null.
+    :param no_title: Do not read molecule titles.
     :returns: DataFrame with molecule column and optional SD data.
     :raises FileError: If the file cannot be read.
 
@@ -144,74 +203,32 @@ def read_oeb(
 
         df = oep.read_oeb("molecules.oeb")
     """
-    path = Path(filepath)
-    if not path.exists():
-        raise FileError(f"File not found: {filepath}")
-
-    # Prepare usecols as a set if provided
+    path = _validate_path(filepath)
     usecols_set = set(usecols) if usecols is not None else None
 
-    # Read molecules
     molecules = []
-    titles = []
+    titles = None if no_title else []
     sd_data_dict: dict[str, list] = {}
 
-    ifs = oechem.oemolistream(str(path))
+    with oechem.oemolistream(str(path)) as ifs:
+        for mol in ifs.GetOEMols():
+            if no_title:
+                mol.SetTitle('')
+                mol.GetActive().SetTitle('')
 
-    mol = oechem.OEGraphMol()
-    while oechem.OEReadMolecule(ifs, mol):
-        # Make a copy to store (OEMol preserves SD data)
-        molecules.append(oechem.OEMol(mol))
-        titles.append(mol.GetTitle())
+            molecules.append(oechem.OEMol(mol))
 
-        # Read SD data
-        if sd_data:
-            for dp in oechem.OEGetSDDataPairs(mol):
-                tag = dp.GetTag()
-                value = dp.GetValue()
+            if not no_title:
+                titles.append(mol.GetTitle())
 
-                # Skip if not in usecols
-                if usecols_set is not None and tag not in usecols_set:
-                    continue
-
-                if tag not in sd_data_dict:
-                    # Backfill with None for previous molecules
-                    sd_data_dict[tag] = [None] * (len(molecules) - 1)
-
-                sd_data_dict[tag].append(value)
-
-            # Fill missing tags with None
-            for tag in sd_data_dict:
-                if len(sd_data_dict[tag]) < len(molecules):
-                    sd_data_dict[tag].append(None)
-
-    ifs.close()
+            if sd_data:
+                _collect_sd_data(mol, sd_data_dict, len(molecules), usecols_set)
 
     log.debug(f"Read {len(molecules)} molecules from {filepath}")
 
-    # Build DataFrame
-    data: dict[str, pl.Series] = {
-        molecule_column: pl.Series(molecules, dtype=MoleculeType()),
-    }
-
-    if title_column is not None:
-        data[title_column] = pl.Series(titles, dtype=pl.String)
-
-    # Add SD data columns
-    for tag, values in sd_data_dict.items():
-        data[tag] = pl.Series(values, dtype=pl.String)
-
-    df = pl.DataFrame(data)
-
-    # Convert numeric columns
-    if numeric_columns is not None:
-        for col in numeric_columns:
-            if col in df.columns:
-                df = df.with_columns(
-                    pl.col(col).cast(pl.Float64, strict=False)
-                )
-
-    return df
+    return _build_molecule_dataframe(
+        molecules, titles, sd_data_dict, molecule_column, title_column, numeric_columns
+    )
 
 
 def read_molecule_csv(
@@ -239,9 +256,7 @@ def read_molecule_csv(
 
         df = oep.read_molecule_csv("data.csv", smiles_column="SMILES")
     """
-    path = Path(filepath)
-    if not path.exists():
-        raise FileError(f"File not found: {filepath}")
+    path = _validate_path(filepath)
 
     # Read CSV with Polars
     df = pl.read_csv(path, **csv_kwargs)
@@ -278,6 +293,7 @@ def read_smi(
     *,
     molecule_column: str = "Molecule",
     title_column: str | None = "Title",
+    no_title: bool = False,
 ) -> pl.DataFrame:
     """Read molecules from a SMILES file into a DataFrame.
 
@@ -287,6 +303,7 @@ def read_smi(
     :param filepath: Path to the SMILES file.
     :param molecule_column: Name for the molecule column.
     :param title_column: Name for the title column, or None to skip.
+    :param no_title: Do not read molecule titles.
     :returns: DataFrame with molecule column and optional title.
     :raises FileError: If the file cannot be read.
 
@@ -294,32 +311,27 @@ def read_smi(
 
         df = oep.read_smi("molecules.smi")
     """
-    path = Path(filepath)
-    if not path.exists():
-        raise FileError(f"File not found: {filepath}")
+    path = _validate_path(filepath)
 
     molecules = []
-    titles = []
+    titles = None if no_title else []
 
-    ifs = oechem.oemolistream(str(path))
+    with oechem.oemolistream(str(path)) as ifs:
+        for mol in ifs.GetOEMols():
+            if no_title:
+                mol.SetTitle('')
+                mol.GetActive().SetTitle('')
 
-    mol = oechem.OEGraphMol()
-    while oechem.OEReadMolecule(ifs, mol):
-        molecules.append(oechem.OEMol(mol))
-        titles.append(mol.GetTitle())
+            molecules.append(oechem.OEMol(mol))
 
-    ifs.close()
+            if not no_title:
+                titles.append(mol.GetTitle())
 
     log.debug(f"Read {len(molecules)} molecules from {filepath}")
 
-    data: dict[str, pl.Series] = {
-        molecule_column: pl.Series(molecules, dtype=MoleculeType()),
-    }
-
-    if title_column is not None:
-        data[title_column] = pl.Series(titles, dtype=pl.String)
-
-    return pl.DataFrame(data)
+    return _build_molecule_dataframe(
+        molecules, titles, {}, molecule_column, title_column, None
+    )
 
 
 def read_oedb(
@@ -330,6 +342,7 @@ def read_oedb(
     sd_data: bool = True,
     usecols: Iterable[str] | None = None,
     numeric_columns: Iterable[str] | None = None,
+    no_title: bool = False,
 ) -> pl.DataFrame:
     """Read molecules from an OEDB file into a DataFrame.
 
@@ -342,6 +355,7 @@ def read_oedb(
     :param usecols: Specific SD tags to read (None = all).
     :param numeric_columns: SD tag columns to convert to numeric types. Invalid values
         that cannot be converted to numeric are silently converted to null.
+    :param no_title: Do not read molecule titles.
     :returns: DataFrame with molecule column and optional SD data.
     :raises FileError: If the file cannot be read.
 
@@ -349,78 +363,37 @@ def read_oedb(
 
         df = oep.read_oedb("molecules.oedb")
     """
-    path = Path(filepath)
-    if not path.exists():
-        raise FileError(f"File not found: {filepath}")
-
-    # Prepare usecols as a set if provided
+    path = _validate_path(filepath)
     usecols_set = set(usecols) if usecols is not None else None
 
-    # Read molecules
     molecules = []
-    titles = []
+    titles = None if no_title else []
     sd_data_dict: dict[str, list] = {}
 
-    ifs = oechem.oemolistream()
-    # Set format explicitly to OEB for OEDB files (same binary format)
-    ifs.SetFormat(oechem.OEFormat_OEB)
-    if not ifs.open(str(path)):
-        raise FileError(f"Failed to open file: {filepath}")
+    with oechem.oemolistream() as ifs:
+        # Set format explicitly to OEB for OEDB files (same binary format)
+        ifs.SetFormat(oechem.OEFormat_OEB)
+        if not ifs.open(str(path)):
+            raise FileError(f"Failed to open file: {filepath}")
 
-    mol = oechem.OEGraphMol()
-    while oechem.OEReadMolecule(ifs, mol):
-        # Make a copy to store (OEMol preserves SD data)
-        molecules.append(oechem.OEMol(mol))
-        titles.append(mol.GetTitle())
+        for mol in ifs.GetOEMols():
+            if no_title:
+                mol.SetTitle('')
+                mol.GetActive().SetTitle('')
 
-        # Read SD data
-        if sd_data:
-            for dp in oechem.OEGetSDDataPairs(mol):
-                tag = dp.GetTag()
-                value = dp.GetValue()
+            molecules.append(oechem.OEMol(mol))
 
-                # Skip if not in usecols
-                if usecols_set is not None and tag not in usecols_set:
-                    continue
+            if not no_title:
+                titles.append(mol.GetTitle())
 
-                if tag not in sd_data_dict:
-                    # Backfill with None for previous molecules
-                    sd_data_dict[tag] = [None] * (len(molecules) - 1)
-
-                sd_data_dict[tag].append(value)
-
-            # Fill missing tags with None
-            for tag in sd_data_dict:
-                if len(sd_data_dict[tag]) < len(molecules):
-                    sd_data_dict[tag].append(None)
-
-    ifs.close()
+            if sd_data:
+                _collect_sd_data(mol, sd_data_dict, len(molecules), usecols_set)
 
     log.debug(f"Read {len(molecules)} molecules from {filepath}")
 
-    # Build DataFrame
-    data: dict[str, pl.Series] = {
-        molecule_column: pl.Series(molecules, dtype=MoleculeType()),
-    }
-
-    if title_column is not None:
-        data[title_column] = pl.Series(titles, dtype=pl.String)
-
-    # Add SD data columns
-    for tag, values in sd_data_dict.items():
-        data[tag] = pl.Series(values, dtype=pl.String)
-
-    df = pl.DataFrame(data)
-
-    # Convert numeric columns
-    if numeric_columns is not None:
-        for col in numeric_columns:
-            if col in df.columns:
-                df = df.with_columns(
-                    pl.col(col).cast(pl.Float64, strict=False)
-                )
-
-    return df
+    return _build_molecule_dataframe(
+        molecules, titles, sd_data_dict, molecule_column, title_column, numeric_columns
+    )
 
 
 def read_oedu(
@@ -428,6 +401,7 @@ def read_oedu(
     *,
     design_unit_column: str = "DesignUnit",
     title_column: str | None = "Title",
+    no_title: bool = False,
 ) -> pl.DataFrame:
     """Read design units from an OEDU file into a DataFrame.
 
@@ -436,6 +410,7 @@ def read_oedu(
     :param filepath: Path to the OEDU file.
     :param design_unit_column: Name for the design unit column.
     :param title_column: Name for the title column, or None to skip.
+    :param no_title: Do not read design unit titles.
     :returns: DataFrame with design unit column and optional title.
     :raises FileError: If the file cannot be read.
 
@@ -443,21 +418,24 @@ def read_oedu(
 
         df = oep.read_oedu("complexes.oedu")
     """
-    path = Path(filepath)
-    if not path.exists():
-        raise FileError(f"File not found: {filepath}")
+    path = _validate_path(filepath)
 
     design_units = []
-    titles = []
+    titles = None if no_title else []
 
     ifs = oechem.oeifstream(str(path))
+    try:
+        du = oechem.OEDesignUnit()
+        while oechem.OEReadDesignUnit(ifs, du):
+            if no_title:
+                du.SetTitle('')
 
-    du = oechem.OEDesignUnit()
-    while oechem.OEReadDesignUnit(ifs, du):
-        design_units.append(oechem.OEDesignUnit(du))
-        titles.append(du.GetTitle())
+            design_units.append(oechem.OEDesignUnit(du))
 
-    ifs.close()
+            if not no_title:
+                titles.append(du.GetTitle())
+    finally:
+        ifs.close()
 
     log.debug(f"Read {len(design_units)} design units from {filepath}")
 
@@ -465,7 +443,7 @@ def read_oedu(
         design_unit_column: pl.Series(design_units, dtype=DesignUnitType()),
     }
 
-    if title_column is not None:
+    if titles is not None and title_column is not None:
         data[title_column] = pl.Series(titles, dtype=pl.String)
 
     return pl.DataFrame(data)
@@ -508,9 +486,7 @@ def read_parquet(
             "if no columns should be converted."
         )
 
-    path = Path(filepath)
-    if not path.exists():
-        raise FileError(f"File not found: {filepath}")
+    path = _validate_path(filepath)
 
     # Read the Parquet file
     df = pl.read_parquet(path, **parquet_kwargs)

@@ -3,11 +3,19 @@
 import copy
 from typing import Any
 
+import numpy as np
 import polars as pl
-from openeye import oechem, oedepict
+from openeye import oechem, oedepict, oegraphsim
 
 from oepolars.exceptions import InvalidSMARTS
-from oepolars.types import DesignUnitType, DisplayType, MoleculeType
+from oepolars.fingerprint import (
+    OEJaccard,
+    fpdist,
+    get_openeye_fp_info,
+    make_fingerprints,
+    to_numpy_fp,
+)
+from oepolars.types import DesignUnitType, DisplayType, FingerprintType, MoleculeType
 
 
 # Dictionary to store metadata for Series objects, keyed by object id.
@@ -29,6 +37,11 @@ def _is_design_unit_type(dtype: pl.DataType) -> bool:
 def _is_display_type(dtype: pl.DataType) -> bool:
     """Check if dtype is DisplayType."""
     return hasattr(dtype, "ext_name") and dtype.ext_name() == "display"
+
+
+def _is_fingerprint_type(dtype: pl.DataType) -> bool:
+    """Check if dtype is FingerprintType."""
+    return hasattr(dtype, "ext_name") and dtype.ext_name() == "fingerprint"
 
 
 @pl.api.register_series_namespace("chem")
@@ -64,12 +77,13 @@ class SeriesChemNamespace:
     def deepcopy(self) -> pl.Series:
         """Create a deep copy of the Series with independent object copies.
 
-        This method copies both the objects (molecules or displays) and the
-        associated metadata, creating a fully independent copy of the Series.
+        This method copies both the objects (molecules, displays, or fingerprints)
+        and the associated metadata, creating a fully independent copy of the Series.
 
         :returns: A new Series with deep copies of all objects and a copy
             of the metadata dictionary.
-        :raises TypeError: If the Series is not a MoleculeType or DisplayType.
+        :raises TypeError: If the Series is not a MoleculeType, DisplayType,
+            or FingerprintType.
 
         Example::
 
@@ -83,10 +97,12 @@ class SeriesChemNamespace:
         dtype = self._series.dtype
         is_molecule = _is_molecule_type(dtype)
         is_display = _is_display_type(dtype)
+        is_fingerprint = _is_fingerprint_type(dtype)
 
-        if not (is_molecule or is_display):
+        if not (is_molecule or is_display or is_fingerprint):
             raise TypeError(
-                f"deepcopy() requires MoleculeType or DisplayType, got {dtype}"
+                f"deepcopy() requires MoleculeType, DisplayType, or FingerprintType, "
+                f"got {dtype}"
             )
 
         if is_molecule:
@@ -99,7 +115,7 @@ class SeriesChemNamespace:
             copied = [copy_mol(mol) for mol in self._series.to_list()]
             new_series = pl.Series(self._series.name, copied, dtype=MoleculeType())
 
-        else:  # is_display
+        elif is_display:
 
             def copy_disp(
                 disp: oedepict.OE2DMolDisplay | None,
@@ -110,6 +126,18 @@ class SeriesChemNamespace:
 
             copied = [copy_disp(disp) for disp in self._series.to_list()]
             new_series = pl.Series(self._series.name, copied, dtype=DisplayType())
+
+        else:  # is_fingerprint
+
+            def copy_fp(
+                fp: oegraphsim.OEFingerPrint | None,
+            ) -> oegraphsim.OEFingerPrint | None:
+                if fp is None:
+                    return None
+                return oegraphsim.OEFingerPrint(fp)
+
+            copied = [copy_fp(fp) for fp in self._series.to_list()]
+            new_series = pl.Series(self._series.name, copied, dtype=FingerprintType())
 
         # Copy metadata to the new series
         series_id = id(self._series)
@@ -328,3 +356,414 @@ class SeriesChemNamespace:
 
         components = [extract_components(du) for du in self._series.to_list()]
         return pl.Series(self._series.name, components, dtype=MoleculeType())
+
+    # =========================================================================
+    # Fingerprint operations
+    # =========================================================================
+
+    def create_fingerprints(
+        self,
+        fptype: str,
+        num_bits: int,
+        min_distance: int,
+        max_distance: int,
+        atom_type: str | int,
+        bond_type: str | int,
+        *,
+        desalt: bool = True,
+        quiet: bool = True,
+    ) -> pl.Series:
+        """Generate fingerprints from molecules in this series.
+
+        :param fptype: OpenEye fingerprint type (path, tree, circular, lingo, maccs).
+        :param num_bits: Number of bits in the fingerprint.
+        :param min_distance: Minimum distance (path, tree) or radius (circular).
+        :param max_distance: Maximum distance (path, tree) or radius (circular).
+        :param atom_type: "|" separated OEFPAtomType members or bitmask.
+        :param bond_type: "|" separated OEFPBondType members or bitmask.
+        :param desalt: Remove salts by keeping only the largest component.
+        :param quiet: Silence the progress bar.
+        :returns: FingerprintType Series containing the generated fingerprints.
+        :raises TypeError: If the Series is not a MoleculeType.
+
+        Example::
+
+            fps = s.chem.create_fingerprints(
+                "circular", 2048, 0, 5, "DefaultAtom", "DefaultBond"
+            )
+        """
+        if not _is_molecule_type(self._series.dtype):
+            raise TypeError(
+                f"create_fingerprints() requires MoleculeType, got {self._series.dtype}"
+            )
+
+        # Generate fingerprints
+        fps = list(
+            make_fingerprints(
+                self._series.to_list(),
+                fptype=fptype,
+                num_bits=num_bits,
+                min_distance=min_distance,
+                max_distance=max_distance,
+                atom_type=atom_type,
+                bond_type=bond_type,
+                desalt=desalt,
+                quiet=quiet,
+            )
+        )
+
+        # Create new series with metadata about fingerprint parameters
+        new_series = pl.Series(self._series.name, fps, dtype=FingerprintType())
+
+        # Store fingerprint parameters in metadata
+        _series_metadata[id(new_series)] = {
+            "fptype": fptype,
+            "num_bits": num_bits,
+            "min_distance": min_distance,
+            "max_distance": max_distance,
+            "atom_type": atom_type,
+            "bond_type": bond_type,
+            "desalt": desalt,
+        }
+
+        return new_series
+
+    def create_numpy_fingerprints(
+        self,
+        fptype: str,
+        num_bits: int,
+        min_distance: int,
+        max_distance: int,
+        atom_type: str | int,
+        bond_type: str | int,
+        *,
+        desalt: bool = True,
+        quiet: bool = True,
+    ) -> pl.Series:
+        """Generate numpy fingerprints from molecules in this series.
+
+        :param fptype: OpenEye fingerprint type (path, tree, circular, lingo, maccs).
+        :param num_bits: Number of bits in the fingerprint.
+        :param min_distance: Minimum distance (path, tree) or radius (circular).
+        :param max_distance: Maximum distance (path, tree) or radius (circular).
+        :param atom_type: "|" separated OEFPAtomType members or bitmask.
+        :param bond_type: "|" separated OEFPBondType members or bitmask.
+        :param desalt: Remove salts by keeping only the largest component.
+        :param quiet: Silence the progress bar.
+        :returns: Series of numpy boolean arrays (one per molecule).
+        :raises TypeError: If the Series is not a MoleculeType.
+
+        Example::
+
+            fps = s.chem.create_numpy_fingerprints(
+                "circular", 2048, 0, 5, "DefaultAtom", "DefaultBond"
+            )
+        """
+        if not _is_molecule_type(self._series.dtype):
+            raise TypeError(
+                f"create_numpy_fingerprints() requires MoleculeType, "
+                f"got {self._series.dtype}"
+            )
+
+        from oepolars.fingerprint import make_numpy_fingerprints
+
+        fps = make_numpy_fingerprints(
+            self._series.to_list(),
+            fptype=fptype,
+            num_bits=num_bits,
+            min_distance=min_distance,
+            max_distance=max_distance,
+            atom_type=atom_type,
+            bond_type=bond_type,
+            desalt=desalt,
+            quiet=quiet,
+        )
+
+        return pl.Series(self._series.name, fps, dtype=pl.Object)
+
+    def copy_fingerprints(self) -> pl.Series:
+        """Create deep copies of all fingerprints in the Series.
+
+        :returns: New Series with independent copies of each fingerprint.
+        :raises TypeError: If the Series is not a FingerprintType.
+
+        Example::
+
+            copied = fps.chem.copy_fingerprints()
+            # Modifying original doesn't affect copy
+        """
+        if not _is_fingerprint_type(self._series.dtype):
+            raise TypeError(
+                f"copy_fingerprints() requires FingerprintType, got {self._series.dtype}"
+            )
+
+        def copy_fp(
+            fp: oegraphsim.OEFingerPrint | None,
+        ) -> oegraphsim.OEFingerPrint | None:
+            if fp is None:
+                return None
+            return oegraphsim.OEFingerPrint(fp)
+
+        copied = [copy_fp(fp) for fp in self._series.to_list()]
+        new_series = pl.Series(self._series.name, copied, dtype=FingerprintType())
+
+        # Copy metadata to the new series
+        series_id = id(self._series)
+        if series_id in _series_metadata:
+            _series_metadata[id(new_series)] = copy.deepcopy(
+                _series_metadata[series_id]
+            )
+
+        return new_series
+
+    def fp_num_bits(self) -> int | None:
+        """Get the number of bits in the fingerprints.
+
+        :returns: Number of bits, or None if array is empty or has no valid
+            fingerprints.
+        :raises TypeError: If the Series is not a FingerprintType.
+
+        Example::
+
+            n_bits = fps.chem.fp_num_bits()
+            # Returns 2048 (or whatever the fingerprint size is)
+        """
+        if not _is_fingerprint_type(self._series.dtype):
+            raise TypeError(
+                f"fp_num_bits() requires FingerprintType, got {self._series.dtype}"
+            )
+
+        for fp in self._series.to_list():
+            if fp is not None and fp.IsValid():
+                return fp.GetSize()
+        return None
+
+    def to_hex_strings(self) -> pl.Series:
+        """Convert fingerprints to hex strings.
+
+        Invalid/missing fingerprints are represented as empty strings.
+
+        :returns: String Series containing hex representations.
+        :raises TypeError: If the Series is not a FingerprintType.
+
+        Example::
+
+            hex_strings = fps.chem.to_hex_strings()
+            # Series: 'fp' [str]
+            # ["A1B2C3...", "D4E5F6...", ...]
+        """
+        if not _is_fingerprint_type(self._series.dtype):
+            raise TypeError(
+                f"to_hex_strings() requires FingerprintType, got {self._series.dtype}"
+            )
+
+        hex_strings = []
+        for fp in self._series.to_list():
+            if fp is not None and fp.IsValid():
+                hex_strings.append(fp.ToHexString())
+            else:
+                hex_strings.append("")
+
+        return pl.Series(self._series.name, hex_strings, dtype=pl.String)
+
+    def fp_to_numpy(self, quiet: bool = True) -> np.ndarray:
+        """Convert fingerprints to a 2D numpy boolean array.
+
+        Each row is a fingerprint, each column is a bit position.
+        Invalid/missing fingerprints are represented as rows of False.
+
+        :param quiet: Silence the progress bar.
+        :returns: 2D numpy array of shape (n_fingerprints, n_bits).
+        :raises TypeError: If the Series is not a FingerprintType.
+
+        Example::
+
+            arr = fps.chem.fp_to_numpy()
+            # array([[True, False, True, ...],
+            #        [False, True, False, ...],
+            #        ...], dtype=bool)
+        """
+        if not _is_fingerprint_type(self._series.dtype):
+            raise TypeError(
+                f"fp_to_numpy() requires FingerprintType, got {self._series.dtype}"
+            )
+
+        fps_list = self._series.to_list()
+
+        # Get fingerprint size from first valid fingerprint
+        n_bits = self.fp_num_bits()
+        if n_bits is None:
+            return np.array([], dtype=bool).reshape(0, 0)
+
+        # Convert each fingerprint
+        result = []
+        fp_info = None
+
+        for fp in fps_list:
+            if fp is None or not fp.IsValid():
+                result.append(np.zeros(n_bits, dtype=bool))
+            else:
+                if fp_info is None:
+                    fp_info = get_openeye_fp_info(fp)
+                result.append(to_numpy_fp(fp, fp_info))
+
+        return np.vstack(result) if result else np.array([], dtype=bool).reshape(
+            0, n_bits
+        )
+
+    def tanimoto(
+        self,
+        other: "pl.Series | oegraphsim.OEFingerPrint",
+    ) -> pl.Series:
+        """Calculate Tanimoto similarity against another fingerprint or Series.
+
+        :param other: Single fingerprint or FingerprintType Series.
+        :returns: Float Series of Tanimoto similarities.
+        :raises TypeError: If the Series is not a FingerprintType.
+        :raises ValueError: If comparing Series of different lengths.
+
+        Example::
+
+            # Compare all fingerprints to a single reference
+            sims = fps.chem.tanimoto(reference_fp)
+
+            # Element-wise comparison between two Series
+            sims = fps1.chem.tanimoto(fps2)
+        """
+        if not _is_fingerprint_type(self._series.dtype):
+            raise TypeError(
+                f"tanimoto() requires FingerprintType, got {self._series.dtype}"
+            )
+
+        fps_list = self._series.to_list()
+
+        if isinstance(other, oegraphsim.OEFingerPrint):
+            # Compare all fingerprints to a single reference
+            similarities = []
+            for fp in fps_list:
+                if fp is None or not fp.IsValid() or not other.IsValid():
+                    similarities.append(np.nan)
+                else:
+                    similarities.append(oegraphsim.OETanimoto(fp, other))
+            return pl.Series(self._series.name, similarities, dtype=pl.Float64)
+
+        elif isinstance(other, pl.Series):
+            if not _is_fingerprint_type(other.dtype):
+                raise TypeError(
+                    f"other must be FingerprintType Series, got {other.dtype}"
+                )
+            if len(self._series) != len(other):
+                raise ValueError(
+                    f"Cannot compare Series of different lengths: "
+                    f"{len(self._series)} vs {len(other)}"
+                )
+            other_list = other.to_list()
+            similarities = []
+            for fp1, fp2 in zip(fps_list, other_list):
+                if fp1 is None or fp2 is None:
+                    similarities.append(np.nan)
+                elif not fp1.IsValid() or not fp2.IsValid():
+                    similarities.append(np.nan)
+                else:
+                    similarities.append(oegraphsim.OETanimoto(fp1, fp2))
+            return pl.Series(self._series.name, similarities, dtype=pl.Float64)
+
+        else:
+            raise TypeError(
+                f"Cannot compare FingerprintType with {type(other).__name__}"
+            )
+
+    def jaccard(
+        self,
+        other: "pl.Series | oegraphsim.OEFingerPrint",
+    ) -> pl.Series:
+        """Calculate Jaccard distance against another fingerprint or Series.
+
+        :param other: Single fingerprint or FingerprintType Series.
+        :returns: Float Series of Jaccard distances.
+        :raises TypeError: If the Series is not a FingerprintType.
+        :raises ValueError: If comparing Series of different lengths.
+
+        Example::
+
+            # Compare all fingerprints to a single reference
+            dists = fps.chem.jaccard(reference_fp)
+
+            # Element-wise comparison between two Series
+            dists = fps1.chem.jaccard(fps2)
+        """
+        if not _is_fingerprint_type(self._series.dtype):
+            raise TypeError(
+                f"jaccard() requires FingerprintType, got {self._series.dtype}"
+            )
+
+        fps_list = self._series.to_list()
+
+        if isinstance(other, oegraphsim.OEFingerPrint):
+            # Compare all fingerprints to a single reference
+            distances = []
+            for fp in fps_list:
+                if fp is None or not fp.IsValid() or not other.IsValid():
+                    distances.append(np.nan)
+                else:
+                    distances.append(OEJaccard(fp, other))
+            return pl.Series(self._series.name, distances, dtype=pl.Float64)
+
+        elif isinstance(other, pl.Series):
+            if not _is_fingerprint_type(other.dtype):
+                raise TypeError(
+                    f"other must be FingerprintType Series, got {other.dtype}"
+                )
+            if len(self._series) != len(other):
+                raise ValueError(
+                    f"Cannot compare Series of different lengths: "
+                    f"{len(self._series)} vs {len(other)}"
+                )
+            other_list = other.to_list()
+            distances = []
+            for fp1, fp2 in zip(fps_list, other_list):
+                if fp1 is None or fp2 is None:
+                    distances.append(np.nan)
+                elif not fp1.IsValid() or not fp2.IsValid():
+                    distances.append(np.nan)
+                else:
+                    distances.append(OEJaccard(fp1, fp2))
+            return pl.Series(self._series.name, distances, dtype=pl.Float64)
+
+        else:
+            raise TypeError(
+                f"Cannot compare FingerprintType with {type(other).__name__}"
+            )
+
+    def pdist(
+        self,
+        metric: str = "tanimoto",
+    ) -> np.ndarray:
+        """Calculate pairwise distances/similarities between all fingerprints.
+
+        :param metric: Comparison metric name (tanimoto, dice, cosine, euclidean,
+            manhattan, jaccard).
+        :returns: Compressed pairwise distance matrix (scipy pdist format).
+        :raises TypeError: If the Series is not a FingerprintType.
+
+        Example::
+
+            # Get pairwise Tanimoto similarities
+            dist_matrix = fps.chem.pdist(metric="tanimoto")
+
+            # Convert to square matrix with scipy
+            from scipy.spatial.distance import squareform
+            square = squareform(dist_matrix)
+        """
+        if not _is_fingerprint_type(self._series.dtype):
+            raise TypeError(
+                f"pdist() requires FingerprintType, got {self._series.dtype}"
+            )
+
+        # Filter to valid fingerprints for pdist calculation
+        valid_fps = [
+            fp
+            for fp in self._series.to_list()
+            if fp is not None and fp.IsValid()
+        ]
+        return fpdist(valid_fps, metric)

@@ -2,6 +2,7 @@
 
 from oepolars.types.design_unit import DesignUnitType
 from oepolars.types.display import DisplayType
+from oepolars.types.fingerprint import FingerprintType
 from oepolars.types.molecule import MoleculeType
 
-__all__ = ["MoleculeType", "DesignUnitType", "DisplayType"]
+__all__ = ["MoleculeType", "DesignUnitType", "DisplayType", "FingerprintType"]

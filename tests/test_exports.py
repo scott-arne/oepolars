@@ -23,3 +23,7 @@ class TestPackageExports:
             OEPolarsError,
         )
         assert issubclass(FileError, OEPolarsError)
+
+    def test_from_pandas_exported(self):
+        from oepolars import from_pandas
+        assert callable(from_pandas)
