@@ -71,7 +71,7 @@ def _is_likely_smiles(val: str) -> bool:
         return True
 
     # Check if molecule has more than one atom (e.g., "CCO" vs "C")
-    return mol.NumAtoms() > 1
+    return bool(mol.NumAtoms() > 1)
 
 
 @pl.api.register_dataframe_namespace("chem")
@@ -116,7 +116,7 @@ class DataFrameChemNamespace:
         result = self._df.clone()
 
         for col in columns:
-            new_col = result[col].chem.as_molecule(
+            new_col = result[col].chem.as_molecule(  # type: ignore[attr-defined]
                 molecule_format=molecule_format,
                 molecule_type=molecule_type,
                 no_title=no_title,
@@ -152,7 +152,7 @@ class DataFrameChemNamespace:
             if _is_query_type(result.schema[col]) and not no_title:
                 continue
 
-            new_col = result[col].chem.as_query(
+            new_col = result[col].chem.as_query(  # type: ignore[attr-defined]
                 query_format=query_format,
                 no_title=no_title,
             )
@@ -249,7 +249,7 @@ class DataFrameChemNamespace:
         if molecule_column not in self._df.columns:
             raise KeyError(f"Column '{molecule_column}' not found in DataFrame")
 
-        matches: pl.Series = self._df[molecule_column].chem.substructure_search(
+        matches: pl.Series = self._df[molecule_column].chem.substructure_search(  # type: ignore[attr-defined]
             pattern,
             adjustH=adjustH,
         )
@@ -273,7 +273,7 @@ class DataFrameChemNamespace:
         if molecule_column not in self._df.columns:
             raise KeyError(f"Column '{molecule_column}' not found in DataFrame")
 
-        mask: pl.Series = self._df[molecule_column].chem.substructure_filter(
+        mask: pl.Series = self._df[molecule_column].chem.substructure_filter(  # type: ignore[attr-defined]
             pattern,
             adjustH=adjustH,
         )
@@ -330,7 +330,7 @@ class DataFrameChemNamespace:
 
         # Convert detected columns
         if columns_to_convert:
-            result = result.chem.as_molecule(columns_to_convert)
+            result = result.chem.as_molecule(columns_to_convert)  # type: ignore[attr-defined]
 
         return result
 
@@ -489,7 +489,7 @@ class DataFrameChemNamespace:
             )
 
         # Convert molecules to SMILES
-        smiles_list = []
+        smiles_list: list[str | None] = []
         for mol in self._df[molecule_column].to_list():
             if mol is None:
                 smiles_list.append(None)

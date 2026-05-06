@@ -1,7 +1,6 @@
-import pytest
 from openeye import oechem
 
-from oepolars.util import mol_to_bytes, bytes_to_mol
+from oepolars.util import bytes_to_mol, mol_to_bytes
 
 
 class TestMoleculeSerializationRoundTrip:

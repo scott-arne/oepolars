@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 from openeye import oechem
 
@@ -62,7 +63,7 @@ def mol_to_bytes(mol: oechem.OEMolBase | None) -> bytes | None:
     """
     if mol is None:
         return None
-    return oechem.OEWriteMolToBytes(".oeb", mol)
+    return cast(bytes, oechem.OEWriteMolToBytes(".oeb", mol))
 
 
 def bytes_to_mol(data: bytes | None) -> oechem.OEMol | None:
