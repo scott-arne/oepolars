@@ -1,5 +1,6 @@
 """Tests for lazy/scan file readers."""
 
+import inspect
 from pathlib import Path
 
 import polars as pl
@@ -296,6 +297,13 @@ class TestScanOEDU:
         assert "DesignUnit" in df.columns
         assert df.schema["DesignUnit"].ext_name() == "design_unit"
 
+    def test_scan_oedu_no_title_clears_design_unit_titles(self, oedu_file):
+        lf = oep.scan_oedu(oedu_file, no_title=True)
+        df = lf.collect()
+
+        assert "Title" not in df.columns
+        assert all(du.GetTitle() == "" for du in df["DesignUnit"].to_list())
+
     def test_scan_oedu_supports_filter(self, oedu_file):
         lf = oep.scan_oedu(oedu_file)
         lf_filtered = lf.filter(pl.col("Title") == "complex1")
@@ -310,6 +318,12 @@ class TestScanOEDU:
 
 
 class TestScanMoleculeCSV:
+    def test_scan_molecule_csv_exposes_parity_parameters(self):
+        signature = inspect.signature(oep.scan_molecule_csv)
+
+        assert "molecule_type" in signature.parameters
+        assert "no_title" in signature.parameters
+
     def test_scan_molecule_csv_returns_lazyframe(self):
         lf = oep.scan_molecule_csv(FIXTURES_DIR / "sample.csv", smiles_column="smiles")
         assert isinstance(lf, pl.LazyFrame)
@@ -324,6 +338,34 @@ class TestScanMoleculeCSV:
         df = lf.collect()
         assert "Molecule" in df.columns
         assert df.schema["Molecule"].ext_name() == "molecule"
+
+    def test_scan_molecule_csv_molecule_type_returns_graph_mols(self):
+        lf = oep.scan_molecule_csv(
+            FIXTURES_DIR / "sample.csv",
+            smiles_column="smiles",
+            molecule_type=oechem.OEGraphMol,
+        )
+        df = lf.collect()
+
+        assert all(
+            isinstance(mol, oechem.OEGraphMol)
+            for mol in df["Molecule"].to_list()
+        )
+
+    def test_scan_molecule_csv_no_title_clears_molecule_titles(self, tmp_path):
+        csv_path = tmp_path / "titled_smiles.csv"
+        csv_path.write_text('smiles\n"CCO ethanol"\n')
+
+        lf = oep.scan_molecule_csv(
+            csv_path,
+            smiles_column="smiles",
+            no_title=True,
+        )
+        df = lf.collect()
+
+        mol = df["Molecule"][0]
+        assert mol.GetTitle() == ""
+        assert mol.GetActive().GetTitle() == ""
 
     def test_scan_molecule_csv_preserves_other_columns(self):
         lf = oep.scan_molecule_csv(FIXTURES_DIR / "sample.csv", smiles_column="smiles")

@@ -232,6 +232,7 @@ def scan_oedu(
     *,
     design_unit_column: str = "DesignUnit",
     title_column: str | None = "Title",
+    no_title: bool = False,
 ) -> pl.LazyFrame:
     """Lazily read design units from an OEDU file.
 
@@ -241,6 +242,7 @@ def scan_oedu(
     :param filepath: Path to the OEDU file.
     :param design_unit_column: Name for the design unit column.
     :param title_column: Name for the title column, or None to skip.
+    :param no_title: Do not read design unit titles.
     :returns: LazyFrame with design unit column and optional title.
     :raises FileError: If the file cannot be read.
 
@@ -253,6 +255,7 @@ def scan_oedu(
         filepath,
         design_unit_column=design_unit_column,
         title_column=title_column,
+        no_title=no_title,
     )
     return df.lazy()
 
@@ -263,6 +266,8 @@ def scan_molecule_csv(
     smiles_column: str,
     molecule_column: str = "Molecule",
     drop_smiles: bool = True,
+    molecule_type: MoleculeTypeInput = None,
+    no_title: bool = False,
     **csv_kwargs,
 ) -> pl.LazyFrame:
     """Lazily read a CSV file and convert a SMILES column to molecules.
@@ -274,6 +279,8 @@ def scan_molecule_csv(
     :param smiles_column: Name of the column containing SMILES strings.
     :param molecule_column: Name for the new molecule column.
     :param drop_smiles: If True (default), remove the original SMILES column.
+    :param molecule_type: Molecule implementation to produce.
+    :param no_title: Clear molecule titles on returned values.
     :param csv_kwargs: Additional arguments passed to ``pl.read_csv()``.
     :returns: LazyFrame with molecule column and other CSV data.
     :raises FileError: If the file cannot be read.
@@ -288,6 +295,8 @@ def scan_molecule_csv(
         smiles_column=smiles_column,
         molecule_column=molecule_column,
         drop_smiles=drop_smiles,
+        molecule_type=molecule_type,
+        no_title=no_title,
         **csv_kwargs,
     )
     return df.lazy()
