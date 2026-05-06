@@ -98,12 +98,25 @@ def _parse_molecule_value(
         return _copy_molecule(value, molecule_type, no_title=no_title)
 
     mol = _new_molecule(molecule_type)
-    if isinstance(value, str) and molecule_format == oechem.OEFormat_SMI:
-        if oechem.OEParseSmiles(mol, value):
+    if isinstance(value, str):
+        if molecule_format == oechem.OEFormat_SMI:
+            if oechem.OEParseSmiles(mol, value):
+                if no_title:
+                    _clear_mol_titles(mol)
+                return mol
+            log.warning("Failed to parse SMILES: %s", value)
+            return None
+
+        if oechem.OEReadMolFromBytes(
+            mol,
+            molecule_format,
+            False,
+            value.encode("utf-8"),
+        ):
             if no_title:
                 _clear_mol_titles(mol)
             return mol
-        log.warning("Failed to parse SMILES: %s", value)
+        log.warning("Failed to read molecule from string")
         return None
 
     if isinstance(value, bytes):

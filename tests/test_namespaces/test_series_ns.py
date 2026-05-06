@@ -122,6 +122,18 @@ class TestSeriesAsMolecule:
         assert result.dtype.ext_name() == "molecule"
         assert isinstance(result[0], oechem.OEGraphMol)
 
+    def test_as_molecule_parses_sdf_string_with_requested_format(self):
+        mol = oechem.OEMol()
+        assert oechem.OEParseSmiles(mol, "CCO")
+        sdf_text = oechem.OEWriteMolToBytes(".sdf", mol).decode("utf-8")
+        s = pl.Series("mol", [sdf_text])
+
+        result = s.chem.as_molecule(molecule_format=oechem.OEFormat_SDF)
+
+        assert result.dtype.ext_name() == "molecule"
+        assert result[0].IsValid()
+        assert oechem.OEMolToSmiles(result[0]) == "CCO"
+
     def test_as_molecule_preserves_existing_graph_mol_from_object_series(self):
         mol = oechem.OEGraphMol()
         assert oechem.OEParseSmiles(mol, "CCO")
