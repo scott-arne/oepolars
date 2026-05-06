@@ -1,3 +1,4 @@
+from pathlib import Path
 
 
 class TestPackageExports:
@@ -39,3 +40,10 @@ class TestPackageExports:
     def test_from_pandas_exported(self):
         from oepolars import from_pandas
         assert callable(from_pandas)
+
+    def test_py_typed_marker_in_imported_package(self):
+        import oepolars
+
+        package_dir = Path(oepolars.__file__).parent
+
+        assert (package_dir / "py.typed").is_file()

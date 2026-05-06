@@ -77,6 +77,12 @@ include = ["oepolars*"]
 exclude = ["*test*"]
 
 
+[tool.setuptools.package-data]
+
+# Include typing marker for PEP 561 consumers
+oepolars = ["py.typed"]
+
+
 [tool.setuptools.dynamic]
 
 # Get the version from a "single source of truth"

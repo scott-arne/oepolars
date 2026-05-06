@@ -19,6 +19,7 @@ OEPolars extends Polars with custom extension types that store OpenEye `OEMol` a
   - [Reading Molecular Data](#reading-molecular-data)
   - [Lazy Reading with Scanners](#lazy-reading-with-scanners)
   - [Working with Molecules](#working-with-molecules)
+  - [Working with Query Columns](#working-with-query-columns)
   - [Design Units](#design-units)
   - [Data Quality and Filtering](#data-quality-and-filtering)
 - [Writing Data](#writing-data)
@@ -182,7 +183,32 @@ copies = df["Molecule"].chem.copy_molecules()
 # Substructure searching with SMARTS
 has_carboxylic_acid = df["Molecule"].chem.subsearch("C(=O)O")
 df_acids = df.filter(has_carboxylic_acid)
+
+# Convert string columns explicitly and choose the OpenEye molecule class
+df = df.chem.as_molecule("SMILES", molecule_type="oegraphmol", no_title=True)
 ```
+
+`molecule_type` accepts `"default"`, `"oemol"`, `"oegraphmol"`, `"oeqmol"`, or the matching OpenEye classes (`oechem.OEMol`, `oechem.OEGraphMol`, `oechem.OEQMol`). Use `no_title=True` on conversions to clear returned molecule titles without mutating source molecule objects when a copy is needed.
+
+### Working with Query Columns
+
+Query strings can be stored as `QueryType` columns for SMARTS and SMIRKS workflows:
+
+```python
+import oepolars as oepl
+import polars as pl
+
+# SMARTS is the default query format
+queries = pl.DataFrame({"query": ["[#6]-[#8]"]}).chem.as_query("query")
+
+# SMIRKS is selected explicitly
+reactions = pl.DataFrame({"transform": ["[#6:1]-[#8:2]>>[#6:1]=[#8:2]"]}).chem.as_query(
+    "transform",
+    query_format=oepl.QueryFormat.SMIRKS,
+)
+```
+
+`.chem.as_query(...)` returns `QueryType` columns. Use `no_title=True` to clear titles on returned query objects without mutating source query objects when a copy is needed.
 
 ### Design Units
 
@@ -194,8 +220,8 @@ df = oepl.read_oedu("protein_ligand_complexes.oedu")
 
 # Extract components using .chem accessor
 df = df.with_columns(
-    Ligand=df["Design_Unit"].chem.get_ligands(),
-    Protein=df["Design_Unit"].chem.get_proteins(),
+    Ligand=df["DesignUnit"].chem.get_ligands(),
+    Protein=df["DesignUnit"].chem.get_proteins(),
 )
 
 # Analyze components
@@ -205,7 +231,7 @@ df = df.with_columns(
 
 # Deep copy design units
 df = df.with_columns(
-    DU_copy=df["Design_Unit"].chem.copy_design_units()
+    DU_copy=df["DesignUnit"].chem.copy_design_units()
 )
 ```
 
@@ -312,6 +338,8 @@ lf = oepl.scan_parquet(
 
 ### File Readers
 
+Molecule readers accept `molecule_type` to select returned OpenEye implementations. Supported values are `"default"`, `"oemol"`, `"oegraphmol"`, `"oeqmol"`, plus `oechem.OEMol`, `oechem.OEGraphMol`, and `oechem.OEQMol`. Use `no_title=True` on readers to omit title columns and clear titles on returned molecule or design-unit values.
+
 #### `read_sdf()`
 
 Read SD (Structure Data) files into a DataFrame.
@@ -325,7 +353,9 @@ oepl.read_sdf(
     title_column="Title",
     sd_data=True,
     usecols=None,
-    numeric_columns=None
+    numeric_columns=None,
+    molecule_type=None,
+    no_title=False
 )
 ```
 
@@ -338,6 +368,8 @@ oepl.read_sdf(
 | `sd_data` | bool | `True` | Read SD data into columns |
 | `usecols` | str, list | `None` | SD tags to read (None for all) |
 | `numeric_columns` | str, list | `None` | Columns to convert to numeric |
+| `molecule_type` | str, OpenEye class | `None` | Molecule implementation selector |
+| `no_title` | bool | `False` | Do not read title columns and clear returned molecule titles |
 
 #### `read_oeb()`
 
@@ -352,7 +384,9 @@ oepl.read_oeb(
     title_column="Title",
     sd_data=True,
     usecols=None,
-    numeric_columns=None
+    numeric_columns=None,
+    molecule_type=None,
+    no_title=False
 )
 ```
 
@@ -367,7 +401,9 @@ oepl.read_smi(
     filepath,
     *,
     molecule_column="Molecule",
-    title_column="Title"
+    title_column="Title",
+    molecule_type=None,
+    no_title=False
 )
 ```
 
@@ -376,6 +412,8 @@ oepl.read_smi(
 | `filepath` | str, Path | required | Path to SMILES file |
 | `molecule_column` | str | `"Molecule"` | Name of molecule column |
 | `title_column` | str | `"Title"` | Name of title column |
+| `molecule_type` | str, OpenEye class | `None` | Molecule implementation selector |
+| `no_title` | bool | `False` | Do not read title columns and clear returned molecule titles |
 
 #### `read_molecule_csv()`
 
@@ -384,10 +422,12 @@ Read CSV files with molecule columns.
 ```python
 oepl.read_molecule_csv(
     filepath,
-    smiles_column,
     *,
+    smiles_column,
     molecule_column="Molecule",
-    drop_smiles=False,
+    drop_smiles=True,
+    molecule_type=None,
+    no_title=False,
     **csv_kwargs
 )
 ```
@@ -397,7 +437,9 @@ oepl.read_molecule_csv(
 | `filepath` | str, Path | required | Path to CSV file |
 | `smiles_column` | str | required | Column containing SMILES strings |
 | `molecule_column` | str | `"Molecule"` | Name of new molecule column |
-| `drop_smiles` | bool | `False` | Drop original SMILES column |
+| `drop_smiles` | bool | `True` | Drop original SMILES column |
+| `molecule_type` | str, OpenEye class | `None` | Molecule implementation selector |
+| `no_title` | bool | `False` | Clear returned molecule titles |
 | `**csv_kwargs` | | | Additional arguments passed to `pl.read_csv()` |
 
 #### `read_oedb()`
@@ -412,7 +454,9 @@ oepl.read_oedb(
     title_column="Title",
     sd_data=True,
     usecols=None,
-    numeric_columns=None
+    numeric_columns=None,
+    molecule_type=None,
+    no_title=False
 )
 ```
 
@@ -426,16 +470,18 @@ Read Design Unit files into a DataFrame.
 oepl.read_oedu(
     filepath,
     *,
-    design_unit_column="Design_Unit",
-    title_column="Title"
+    design_unit_column="DesignUnit",
+    title_column="Title",
+    no_title=False
 )
 ```
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `filepath` | str, Path | required | Path to OEDU file |
-| `design_unit_column` | str | `"Design_Unit"` | Name of design unit column |
+| `design_unit_column` | str | `"DesignUnit"` | Name of design unit column |
 | `title_column` | str | `"Title"` | Name of title column |
+| `no_title` | bool | `False` | Do not read title columns and clear returned design-unit titles |
 
 #### `read_parquet()`
 
@@ -471,6 +517,8 @@ All scanners return `pl.LazyFrame` for query optimization. Parameters match thei
 | `scan_oedu()` | Lazy reading of OEDU files |
 | `scan_parquet()` | Lazy reading of Parquet files |
 
+Molecule scanners accept the same `molecule_type` and `no_title` options as the eager molecule readers. `scan_oedu()` accepts `no_title` for design-unit titles.
+
 ---
 
 ### DataFrame Accessor Methods (`df.chem.*`)
@@ -485,7 +533,9 @@ Convert column(s) to MoleculeType.
 df.chem.as_molecule(
     columns,
     *,
-    molecule_format=None
+    molecule_format=None,
+    molecule_type=None,
+    no_title=False
 )
 ```
 
@@ -493,6 +543,27 @@ df.chem.as_molecule(
 |-----------|------|---------|-------------|
 | `columns` | str, list | required | Column name(s) to convert |
 | `molecule_format` | str, int | `None` | Format for parsing (default: SMILES) |
+| `molecule_type` | str, OpenEye class | `None` | Molecule implementation selector |
+| `no_title` | bool | `False` | Clear titles on returned molecule copies |
+
+#### `as_query()`
+
+Convert column(s) to QueryType.
+
+```python
+df.chem.as_query(
+    columns,
+    *,
+    query_format=QueryFormat.SMARTS,
+    no_title=False
+)
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `columns` | str, list | required | Column name(s) to convert |
+| `query_format` | QueryFormat, str | `QueryFormat.SMARTS` | Query parser format; use `QueryFormat.SMIRKS` for SMIRKS |
+| `no_title` | bool | `False` | Clear titles on returned query copies |
 
 #### `filter_valid()`
 
@@ -644,7 +715,7 @@ Access these methods via `lf.chem.<method>()`. Most operations require `.collect
 | `has_molecule_columns()` | `bool` | Check if LazyFrame has molecule columns |
 | `molecule_columns()` | `list[str]` | Get names of molecule columns |
 
-**Note:** Operations like `to_smiles()`, `subsearch()`, `filter_valid()`, and `as_molecule()` raise `LazyOperationError` on LazyFrames. Use `.collect()` first or apply these on eager DataFrames.
+**Note:** Operations like `to_smiles()`, `subsearch()`, `filter_valid()`, `as_molecule()`, and `as_query()` raise `LazyOperationError` on LazyFrames. Use `.collect()` first or apply these on eager DataFrames.
 
 ---
 
@@ -656,29 +727,38 @@ Access these methods via `series.chem.<method>()`:
 
 | Method | Returns | Description |
 |--------|---------|-------------|
+| `as_molecule(molecule_format=None, molecule_type=None, no_title=False)` | `Series[MoleculeType]` | Convert strings or molecule objects to molecule columns |
 | `copy_molecules()` | `Series[MoleculeType]` | Deep copy all molecules |
 | `is_valid()` | `Series[bool]` | Boolean mask of valid (non-null) molecules |
 | `to_smiles(flavor=OESMILESFlag_ISOMERIC)` | `Series[str]` | Convert to SMILES strings |
 | `subsearch(pattern, adjustH=False)` | `Series[bool]` | Substructure search with SMARTS pattern |
+
+#### Query Methods
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `as_query(query_format=QueryFormat.SMARTS, no_title=False)` | `Series[QueryType]` | Convert SMARTS or SMIRKS strings to query columns |
+| `is_valid()` | `Series[bool]` | Boolean mask of valid (non-null) queries |
 
 #### Design Unit Methods
 
 | Method | Returns | Description |
 |--------|---------|-------------|
 | `copy_design_units()` | `Series[DesignUnitType]` | Deep copy all design units |
-| `get_ligands(clear_titles=False)` | `Series[MoleculeType]` | Extract ligand molecules |
-| `get_proteins(clear_titles=False)` | `Series[MoleculeType]` | Extract protein molecules |
+| `get_ligands(no_title=False)` | `Series[MoleculeType]` | Extract ligand molecules |
+| `get_proteins(no_title=False)` | `Series[MoleculeType]` | Extract protein molecules |
 | `get_components(mask)` | `Series[MoleculeType]` | Extract components by mask |
 
 ---
 
 ### Extension Types
 
-OEPolars provides three custom Polars extension types:
+OEPolars provides four custom Polars extension types:
 
 | Type Class | Extension Name | Underlying Type | Description |
 |------------|----------------|-----------------|-------------|
 | `MoleculeType` | `"molecule"` | `oechem.OEMol` | Stores molecular structures |
+| `QueryType` | `"query"` | `oechem.OEQMol` | Stores query molecules |
 | `DesignUnitType` | `"design_unit"` | `oechem.OEDesignUnit` | Stores protein-ligand complexes |
 | `DisplayType` | `"display"` | `oedepict.OE2DMolDisplay` | Stores 2D molecular depictions |
 
