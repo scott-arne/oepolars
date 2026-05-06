@@ -8,6 +8,26 @@ from oepolars import DesignUnitType, MoleculeType, MoleculeTypeKind, QueryFormat
 from oepolars.exceptions import InvalidSMARTS
 
 
+def _make_titled_molecule(smiles: str, title: str) -> oechem.OEMol:
+    mol = oechem.OEMol()
+    assert oechem.OEParseSmiles(mol, smiles)
+    mol.SetTitle(title)
+    mol.GetActive().SetTitle(f"{title} active")
+    return mol
+
+
+def _copy_molecule_into(
+    target: oechem.OEMolBase,
+    source: oechem.OEMolBase,
+) -> bool:
+    target.Clear()
+    oechem.OEAddMols(target, source)
+    target.SetTitle(source.GetTitle())
+    if isinstance(target, oechem.OEMol) and isinstance(source, oechem.OEMol):
+        target.GetActive().SetTitle(source.GetActive().GetTitle())
+    return True
+
+
 class TestSeriesNamespaceRegistration:
     def test_chem_namespace_exists_on_series(self):
         s = pl.Series("x", [1, 2, 3])
@@ -312,6 +332,16 @@ class TestSeriesCopyMolecules:
         assert result[0] is not None
         assert result[1] is None
 
+    def test_copy_molecules_preserves_concrete_molecule_class(self):
+        mol = oechem.OEGraphMol()
+        assert oechem.OEParseSmiles(mol, "CCO")
+        s = pl.Series("mol", [mol], dtype=MoleculeType())
+
+        result = s.chem.copy_molecules()
+
+        assert isinstance(result[0], oechem.OEGraphMol)
+        assert result[0] is not mol
+
     def test_copy_molecules_wrong_type_raises(self):
         s = pl.Series("x", ["a", "b", "c"])
         with pytest.raises(TypeError, match="MoleculeType"):
@@ -319,6 +349,21 @@ class TestSeriesCopyMolecules:
 
 
 class TestSeriesDesignUnitOperations:
+    @pytest.fixture
+    def design_unit_with_titled_components(self):
+        class DesignUnitWithTitledComponents:
+            def __init__(self) -> None:
+                self.ligand = _make_titled_molecule("CCO", "ligand")
+                self.protein = _make_titled_molecule("NCC", "protein")
+
+            def GetLigand(self, mol: oechem.OEMolBase) -> bool:
+                return _copy_molecule_into(mol, self.ligand)
+
+            def GetProtein(self, mol: oechem.OEMolBase) -> bool:
+                return _copy_molecule_into(mol, self.protein)
+
+        return DesignUnitWithTitledComponents()
+
     def test_copy_design_units_returns_series(self):
         du = oechem.OEDesignUnit()
         s = pl.Series("du", [du], dtype=DesignUnitType())
@@ -396,6 +441,28 @@ class TestSeriesDesignUnitOperations:
 
         with pytest.raises(ValueError, match="clear_titles"):
             s.chem.get_ligands(no_title=True, clear_titles=False)
+
+    def test_get_ligands_no_title_clears_titles(
+        self,
+        design_unit_with_titled_components,
+    ):
+        s = pl.Series("du", [design_unit_with_titled_components], dtype=DesignUnitType())
+
+        result = s.chem.get_ligands(no_title=True)
+
+        assert result[0].GetTitle() == ""
+        assert result[0].GetActive().GetTitle() == ""
+
+    def test_get_proteins_clear_titles_alias_clears_titles(
+        self,
+        design_unit_with_titled_components,
+    ):
+        s = pl.Series("du", [design_unit_with_titled_components], dtype=DesignUnitType())
+
+        result = s.chem.get_proteins(clear_titles=True)
+
+        assert result[0].GetTitle() == ""
+        assert result[0].GetActive().GetTitle() == ""
 
     def test_get_ligands_with_nulls(self):
         du = oechem.OEDesignUnit()
