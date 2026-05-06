@@ -15,19 +15,27 @@ from oepolars.util import mol_to_bytes
 log = logging.getLogger("oepolars")
 
 
+def _extension_name(dtype: pl.DataType) -> str | None:
+    """Return a Polars extension dtype name when present."""
+    ext_name = getattr(dtype, "ext_name", None)
+    if callable(ext_name):
+        return str(ext_name())
+    return None
+
+
 def _is_molecule_type(dtype: pl.DataType) -> bool:
     """Check if dtype is MoleculeType."""
-    return hasattr(dtype, "ext_name") and dtype.ext_name() == "molecule"
+    return _extension_name(dtype) == "molecule"
 
 
 def _is_query_type(dtype: pl.DataType) -> bool:
     """Check if dtype is QueryType."""
-    return hasattr(dtype, "ext_name") and dtype.ext_name() == "query"
+    return _extension_name(dtype) == "query"
 
 
 def _is_design_unit_type(dtype: pl.DataType) -> bool:
     """Check if dtype is DesignUnitType."""
-    return hasattr(dtype, "ext_name") and dtype.ext_name() == "design_unit"
+    return _extension_name(dtype) == "design_unit"
 
 
 def _parse_smiles_to_mol(smiles: str | None) -> oechem.OEMol | None:

@@ -42,29 +42,37 @@ log = logging.getLogger("oepolars")
 _series_metadata: dict[int, dict[str, Any]] = {}
 
 
+def _extension_name(dtype: pl.DataType) -> str | None:
+    """Return a Polars extension dtype name when present."""
+    ext_name = getattr(dtype, "ext_name", None)
+    if callable(ext_name):
+        return str(ext_name())
+    return None
+
+
 def _is_molecule_type(dtype: pl.DataType) -> bool:
     """Check if dtype is MoleculeType."""
-    return hasattr(dtype, "ext_name") and dtype.ext_name() == "molecule"
+    return _extension_name(dtype) == "molecule"
 
 
 def _is_query_type(dtype: pl.DataType) -> bool:
     """Check if dtype is QueryType."""
-    return hasattr(dtype, "ext_name") and dtype.ext_name() == "query"
+    return _extension_name(dtype) == "query"
 
 
 def _is_design_unit_type(dtype: pl.DataType) -> bool:
     """Check if dtype is DesignUnitType."""
-    return hasattr(dtype, "ext_name") and dtype.ext_name() == "design_unit"
+    return _extension_name(dtype) == "design_unit"
 
 
 def _is_display_type(dtype: pl.DataType) -> bool:
     """Check if dtype is DisplayType."""
-    return hasattr(dtype, "ext_name") and dtype.ext_name() == "display"
+    return _extension_name(dtype) == "display"
 
 
 def _is_fingerprint_type(dtype: pl.DataType) -> bool:
     """Check if dtype is FingerprintType."""
-    return hasattr(dtype, "ext_name") and dtype.ext_name() == "fingerprint"
+    return _extension_name(dtype) == "fingerprint"
 
 
 def _resolve_no_title(no_title: bool, clear_titles: bool | None) -> bool:
