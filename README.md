@@ -217,6 +217,8 @@ reactions = pl.DataFrame({"transform": ["[#6:1]-[#8:2]>>[#6:1]=[#8:2]"]}).chem.a
 Work with protein-ligand complexes stored as `DesignUnitType`:
 
 ```python
+import polars as pl
+
 # Read design unit file
 df = oepl.read_oedu("protein_ligand_complexes.oedu")
 
