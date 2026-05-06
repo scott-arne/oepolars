@@ -155,6 +155,19 @@ class TestDataFrameFilterValid:
         result = df.chem.filter_valid("mol")
         assert result["name"].to_list() == ["ethanol"]
 
+    def test_filter_valid_removes_invalid_non_null_molecules(self):
+        valid = oechem.OEMol()
+        assert oechem.OEParseSmiles(valid, "CCO")
+        invalid = oechem.OEMol()
+        df = pl.DataFrame({
+            "mol": pl.Series([valid, invalid], dtype=MoleculeType()),
+            "name": ["ethanol", "empty"],
+        })
+
+        result = df.chem.filter_valid("mol")
+
+        assert result["name"].to_list() == ["ethanol"]
+
     def test_filter_valid_column_not_found_raises(self):
         df = pl.DataFrame({"x": [1, 2, 3]})
         with pytest.raises(KeyError):
@@ -168,13 +181,17 @@ class TestDataFrameSubstructureSearch:
             mol = oechem.OEMol()
             oechem.OEParseSmiles(mol, smiles)
             mols.append(mol)
-        df = pl.DataFrame({"mol": pl.Series(mols, dtype=MoleculeType())})
+        df = pl.DataFrame({
+            "mol": pl.Series(mols, dtype=MoleculeType()),
+            "name": ["ethanol", "benzene", "phenol"],
+        })
         query = oechem.OEQMol()
         assert oechem.OEParseSmarts(query, "c1ccccc1")
 
         result = df.chem.substructure_search("mol", query)
 
-        assert result.to_list() == [False, True, True]
+        assert isinstance(result, pl.DataFrame)
+        assert result["name"].to_list() == ["benzene", "phenol"]
 
     def test_substructure_filter_accepts_oeqmol(self):
         mols = []

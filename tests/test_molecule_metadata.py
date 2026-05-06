@@ -57,3 +57,14 @@ class TestMoleculeMetadata:
 
         # Copy should be unchanged
         assert copied[0].GetTitle() == "original"
+
+    def test_deepcopy_preserves_concrete_molecule_class(self):
+        """Deep copy should preserve selected OpenEye molecule implementations."""
+        mol = oechem.OEGraphMol()
+        oechem.OESmilesToMol(mol, "CCO")
+        s = pl.Series("mol", [mol], dtype=MoleculeType())
+
+        copied = s.chem.deepcopy()
+
+        assert isinstance(copied[0], oechem.OEGraphMol)
+        assert copied[0] is not mol

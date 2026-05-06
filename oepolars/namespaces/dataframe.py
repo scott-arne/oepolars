@@ -206,10 +206,10 @@ class DataFrameChemNamespace:
         return result
 
     def filter_valid(self, columns: str | Iterable[str]) -> pl.DataFrame:
-        """Filter out rows with null molecules in specified columns.
+        """Filter out rows with invalid values in specified columns.
 
         :param columns: Column name or list of column names to check for validity.
-        :returns: DataFrame with rows containing null molecules removed.
+        :returns: DataFrame with rows containing invalid values removed.
         :raises KeyError: If a specified column does not exist.
 
         Example::
@@ -224,12 +224,16 @@ class DataFrameChemNamespace:
             if col not in self._df.columns:
                 raise KeyError(f"Column '{col}' not found in DataFrame")
 
-        # Build filter expression: all specified columns must be not null
-        filter_expr = pl.lit(True)
+        mask = pl.Series("valid", [True] * len(self._df), dtype=pl.Boolean)
         for col in columns:
-            filter_expr = filter_expr & pl.col(col).is_not_null()
+            dtype = self._df.schema[col]
+            if _is_molecule_type(dtype) or _is_query_type(dtype) or _is_design_unit_type(dtype):
+                col_mask = self._df[col].chem.is_valid()  # type: ignore[attr-defined]
+            else:
+                col_mask = self._df[col].is_not_null()
+            mask = mask & col_mask
 
-        return self._df.filter(filter_expr)
+        return self._df.filter(mask)
 
     def substructure_search(
         self,
@@ -237,23 +241,23 @@ class DataFrameChemNamespace:
         pattern: str | oechem.OEQMol | oechem.OESubSearch,
         *,
         adjustH: bool = False,
-    ) -> pl.Series:
+    ) -> pl.DataFrame:
         """Perform substructure search on a molecule column.
 
         :param molecule_column: Name of the molecule column to search.
         :param pattern: SMARTS pattern string, OEQMol, or OESubSearch object.
         :param adjustH: If True, adjust implicit/explicit hydrogens to match query.
-        :returns: Boolean Series where True indicates a substructure match.
+        :returns: DataFrame containing rows that match the substructure.
         :raises KeyError: If molecule_column does not exist.
         """
         if molecule_column not in self._df.columns:
             raise KeyError(f"Column '{molecule_column}' not found in DataFrame")
 
-        matches: pl.Series = self._df[molecule_column].chem.substructure_search(  # type: ignore[attr-defined]
+        mask: pl.Series = self._df[molecule_column].chem.substructure_search(  # type: ignore[attr-defined]
             pattern,
             adjustH=adjustH,
         )
-        return matches
+        return self._df.filter(mask)
 
     def substructure_filter(
         self,

@@ -221,10 +221,12 @@ class SeriesChemNamespace:
 
         if is_molecule:
 
-            def copy_mol(mol: oechem.OEMolBase | None) -> oechem.OEMol | None:
+            def copy_mol(
+                mol: oechem.OEMolBase | None,
+            ) -> oechem.OEMolBase | None:
                 if mol is None:
                     return None
-                return oechem.OEMol(mol)
+                return _copy_molecule(mol)
 
             copied = [copy_mol(mol) for mol in self._series.to_list()]
             new_series = pl.Series(self._series.name, copied, dtype=MoleculeType())
