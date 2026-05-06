@@ -71,6 +71,7 @@ pip install -e ".[dev]"
 
 ```python
 import oepolars as oepl
+import polars as pl
 from openeye import oechem
 
 # Load molecule data from various formats
@@ -135,6 +136,7 @@ OEPolars provides lazy scanners for query optimization on large datasets:
 
 ```python
 import oepolars as oepl
+import polars as pl
 
 # Lazy reading - operations are optimized before execution
 lf = oepl.scan_sdf("large_dataset.sdf")
@@ -379,7 +381,6 @@ Read OpenEye Binary (OEB) files into a DataFrame.
 oepl.read_oeb(
     filepath,
     *,
-    flavor=oechem.OEIFlavor_SDF_Default,
     molecule_column="Molecule",
     title_column="Title",
     sd_data=True,
@@ -390,7 +391,7 @@ oepl.read_oeb(
 )
 ```
 
-*Parameters same as `read_sdf()`*
+*Parameters same as `read_sdf()`, except `read_oeb()` does not accept `flavor`.*
 
 #### `read_smi()`
 
@@ -460,7 +461,7 @@ oepl.read_oedb(
 )
 ```
 
-*Parameters same as `read_sdf()`*
+*Parameters same as `read_sdf()`, except `read_oedb()` does not accept `flavor`.*
 
 #### `read_oedu()`
 
@@ -753,7 +754,7 @@ Access these methods via `series.chem.<method>()`:
 
 ### Extension Types
 
-OEPolars provides four custom Polars extension types:
+OEPolars provides five custom Polars extension types:
 
 | Type Class | Extension Name | Underlying Type | Description |
 |------------|----------------|-----------------|-------------|
@@ -761,6 +762,7 @@ OEPolars provides four custom Polars extension types:
 | `QueryType` | `"query"` | `oechem.OEQMol` | Stores query molecules |
 | `DesignUnitType` | `"design_unit"` | `oechem.OEDesignUnit` | Stores protein-ligand complexes |
 | `DisplayType` | `"display"` | `oedepict.OE2DMolDisplay` | Stores 2D molecular depictions |
+| `FingerprintType` | `"fingerprint"` | `oegraphsim.OEFingerPrint` | Stores molecular fingerprints |
 
 ---
 
