@@ -657,7 +657,7 @@ class DataFrameChemNamespace:
         # Set format explicitly to OEB for OEDB files (same binary format)
         ofs.SetFormat(oechem.OEFormat_OEB)
         if not ofs.open(str(Path(filepath))):
-            raise OSError(f"Failed to open file for writing: {filepath}")
+            raise IOError(f"Failed to open file for writing: {filepath}")  # noqa: UP024
 
         try:
             sd_cols_list = list(sd_columns) if sd_columns else []

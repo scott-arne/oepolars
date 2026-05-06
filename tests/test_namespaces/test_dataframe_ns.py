@@ -176,6 +176,23 @@ class TestDataFrameSubstructureSearch:
 
         assert result.to_list() == [False, True, True]
 
+    def test_substructure_filter_accepts_oeqmol(self):
+        mols = []
+        for smiles in ["CCO", "c1ccccc1", "c1ccc(O)cc1"]:
+            mol = oechem.OEMol()
+            oechem.OEParseSmiles(mol, smiles)
+            mols.append(mol)
+        df = pl.DataFrame({
+            "mol": pl.Series(mols, dtype=MoleculeType()),
+            "name": ["ethanol", "benzene", "phenol"],
+        })
+        query = oechem.OEQMol()
+        assert oechem.OEParseSmarts(query, "c1ccccc1")
+
+        result = df.chem.substructure_filter("mol", query)
+
+        assert result["name"].to_list() == ["ethanol"]
+
 
 class TestDataFrameDetectMoleculeColumns:
     def test_detect_converts_smiles_columns(self):

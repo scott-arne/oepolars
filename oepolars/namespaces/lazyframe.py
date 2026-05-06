@@ -3,6 +3,7 @@
 import polars as pl
 
 from oepolars.exceptions import LazyOperationError
+from oepolars.types.query import QueryFormat, QueryFormatInput
 
 
 def _is_molecule_type(dtype: pl.DataType) -> bool:
@@ -101,7 +102,13 @@ class LazyFrameChemNamespace:
             "Use lf.collect().chem.as_molecule() instead."
         )
 
-    def as_query(self, columns: str | list[str]) -> None:
+    def as_query(
+        self,
+        columns: str | list[str],
+        *,
+        query_format: QueryFormatInput = QueryFormat.SMARTS,
+        no_title: bool = False,
+    ) -> None:
         """Convert columns to queries - NOT SUPPORTED on LazyFrames.
 
         :raises LazyOperationError: Always raised. Use ``.collect()`` first.
