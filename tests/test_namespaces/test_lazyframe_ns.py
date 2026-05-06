@@ -1,11 +1,10 @@
-import polars as pl
-import pytest
 from pathlib import Path
 
-import oepolars as oep
-from oepolars import MoleculeType
-from oepolars.exceptions import LazyOperationError
+import polars as pl
+import pytest
 
+import oepolars as oep
+from oepolars.exceptions import LazyOperationError
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 
@@ -56,6 +55,11 @@ class TestLazyFrameRestrictedOperations:
         lf = pl.LazyFrame({"smiles": ["CCO", "c1ccccc1"]})
         with pytest.raises(LazyOperationError, match="collect"):
             lf.chem.as_molecule("smiles")
+
+    def test_as_query_raises_lazy_operation_error(self):
+        lf = pl.LazyFrame({"query": ["[#6]", "c1ccccc1"]})
+        with pytest.raises(LazyOperationError, match="collect"):
+            lf.chem.as_query("query")
 
     def test_detect_molecule_columns_raises_lazy_operation_error(self):
         lf = pl.LazyFrame({"smiles": ["CCO", "c1ccccc1"]})

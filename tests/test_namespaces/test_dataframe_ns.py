@@ -3,7 +3,7 @@ import pytest
 from openeye import oechem
 
 import oepolars  # noqa: F401
-from oepolars import MoleculeType
+from oepolars import MoleculeType, QueryFormat, QueryType
 
 
 class TestDataFrameNamespaceRegistration:
@@ -62,6 +62,66 @@ class TestDataFrameAsMolecule:
         result = df.chem.as_molecule("mol")
         assert result.schema["mol"].ext_name() == "molecule"
 
+    def test_as_molecule_with_molecule_type_returns_oegraphmol_values(self):
+        df = pl.DataFrame({"smiles": ["CCO", "c1ccccc1"]})
+
+        result = df.chem.as_molecule("smiles", molecule_type=oechem.OEGraphMol)
+
+        assert result.schema["smiles"].ext_name() == "molecule"
+        assert all(
+            isinstance(mol, oechem.OEGraphMol)
+            for mol in result["smiles"].to_list()
+        )
+
+    def test_as_molecule_no_title_clears_copy_not_source(self):
+        mol = oechem.OEMol()
+        oechem.OEParseSmiles(mol, "CCO")
+        mol.SetTitle("source")
+        df = pl.DataFrame({"mol": pl.Series([mol], dtype=MoleculeType())})
+
+        result = df.chem.as_molecule("mol", no_title=True)
+
+        assert df["mol"][0].GetTitle() == "source"
+        assert result["mol"][0].GetTitle() == ""
+
+
+class TestDataFrameAsQuery:
+    def test_as_query_converts_smarts_column(self):
+        df = pl.DataFrame({"query": ["[#6]", "c1ccccc1"]})
+
+        result = df.chem.as_query("query")
+
+        assert result.schema["query"].ext_name() == "query"
+        assert all(
+            isinstance(query, oechem.OEQMol)
+            for query in result["query"].to_list()
+        )
+
+    def test_as_query_converts_smirks_column(self):
+        df = pl.DataFrame({"query": ["[C:1]>>[C:1][O]"]})
+
+        result = df.chem.as_query("query", query_format=QueryFormat.SMIRKS)
+
+        assert result.schema["query"].ext_name() == "query"
+        assert isinstance(result["query"][0], oechem.OEQMol)
+
+    def test_as_query_no_title_clears_copy_not_source(self):
+        query = oechem.OEQMol()
+        assert oechem.OEParseSmarts(query, "[#6]")
+        query.SetTitle("source")
+        df = pl.DataFrame({"query": pl.Series([query], dtype=QueryType())})
+
+        result = df.chem.as_query("query", no_title=True)
+
+        assert df["query"][0].GetTitle() == "source"
+        assert result["query"][0].GetTitle() == ""
+
+    def test_as_query_column_not_found_raises(self):
+        df = pl.DataFrame({"x": [1, 2, 3]})
+
+        with pytest.raises(KeyError):
+            df.chem.as_query("nonexistent")
+
 
 class TestDataFrameFilterValid:
     def test_filter_valid_removes_null_molecules(self):
@@ -99,6 +159,22 @@ class TestDataFrameFilterValid:
         df = pl.DataFrame({"x": [1, 2, 3]})
         with pytest.raises(KeyError):
             df.chem.filter_valid("nonexistent")
+
+
+class TestDataFrameSubstructureSearch:
+    def test_substructure_search_accepts_oeqmol(self):
+        mols = []
+        for smiles in ["CCO", "c1ccccc1", "c1ccc(O)cc1"]:
+            mol = oechem.OEMol()
+            oechem.OEParseSmiles(mol, smiles)
+            mols.append(mol)
+        df = pl.DataFrame({"mol": pl.Series(mols, dtype=MoleculeType())})
+        query = oechem.OEQMol()
+        assert oechem.OEParseSmarts(query, "c1ccccc1")
+
+        result = df.chem.substructure_search("mol", query)
+
+        assert result.to_list() == [False, True, True]
 
 
 class TestDataFrameDetectMoleculeColumns:

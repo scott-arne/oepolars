@@ -101,6 +101,16 @@ class LazyFrameChemNamespace:
             "Use lf.collect().chem.as_molecule() instead."
         )
 
+    def as_query(self, columns: str | list[str]) -> None:
+        """Convert columns to queries - NOT SUPPORTED on LazyFrames.
+
+        :raises LazyOperationError: Always raised. Use ``.collect()`` first.
+        """
+        raise LazyOperationError(
+            "as_query() requires eager evaluation. "
+            "Use lf.collect().chem.as_query() instead."
+        )
+
     def detect_molecule_columns(self) -> None:
         """Detect and convert molecule columns - NOT SUPPORTED on LazyFrames.
 
