@@ -72,7 +72,7 @@ class TestSeriesIsValid:
         du = oechem.OEDesignUnit()
         s = pl.Series("du", [du, None], dtype=DesignUnitType())
         result = s.chem.is_valid()
-        assert result.to_list() == [False, False]
+        assert result.to_list() == [True, False]
 
     def test_is_valid_with_query_type(self):
         query = oechem.OEQMol()

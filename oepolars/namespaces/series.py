@@ -319,15 +319,18 @@ class SeriesChemNamespace:
             # [true, false, true]
         """
         dtype = self._series.dtype
-        if not (
-            _is_molecule_type(dtype)
-            or _is_query_type(dtype)
-            or _is_design_unit_type(dtype)
-        ):
+        is_molecule = _is_molecule_type(dtype)
+        is_query = _is_query_type(dtype)
+        is_design_unit = _is_design_unit_type(dtype)
+
+        if not (is_molecule or is_query or is_design_unit):
             raise TypeError(
                 "is_valid() requires MoleculeType, QueryType, or DesignUnitType, "
                 f"got {dtype}"
             )
+
+        if is_design_unit:
+            return self._series.is_not_null()
 
         return self._series.map_elements(
             _valid_openeye_object,
