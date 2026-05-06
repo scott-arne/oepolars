@@ -9,6 +9,18 @@ class TestPackageExports:
         from oepolars import MoleculeType
         assert MoleculeType is not None
 
+    def test_query_type_exported(self):
+        from oepolars import QueryType
+        assert QueryType is not None
+
+    def test_query_format_exported(self):
+        from oepolars import QueryFormat
+        assert QueryFormat.SMARTS == "smarts"
+
+    def test_molecule_type_kind_exported(self):
+        from oepolars import MoleculeTypeKind
+        assert MoleculeTypeKind.OEQMOL == "oeqmol"
+
     def test_design_unit_type_exported(self):
         from oepolars import DesignUnitType
         assert DesignUnitType is not None

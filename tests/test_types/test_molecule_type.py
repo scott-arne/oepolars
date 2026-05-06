@@ -2,7 +2,14 @@ import polars as pl
 import pytest
 from openeye import oechem
 
-from oepolars.types import MoleculeType
+from oepolars.types import MoleculeType, MoleculeTypeKind
+from oepolars.types.molecule import (
+    _coerce_molecule,
+    _copy_molecule,
+    _molecule_class_for_type,
+    _new_molecule,
+    _normalize_molecule_type,
+)
 
 
 class TestMoleculeTypeCreation:
@@ -17,6 +24,54 @@ class TestMoleculeTypeCreation:
     def test_molecule_type_storage(self):
         mol_type = MoleculeType()
         assert mol_type.ext_storage() == pl.Object
+
+
+class TestMoleculeTypeKind:
+    def test_normalizes_none_to_default(self):
+        assert _normalize_molecule_type(None) == MoleculeTypeKind.DEFAULT
+
+    def test_normalizes_enum(self):
+        assert _normalize_molecule_type(MoleculeTypeKind.OEMOL) == MoleculeTypeKind.OEMOL
+
+    def test_normalizes_flexible_string(self):
+        assert _normalize_molecule_type("oe_graph_mol") == MoleculeTypeKind.OEGRAPHMOL
+
+    def test_normalizes_openeye_class(self):
+        assert _normalize_molecule_type(oechem.OEQMol) == MoleculeTypeKind.OEQMOL
+
+    def test_rejects_invalid_selector(self):
+        with pytest.raises(ValueError, match="Unsupported molecule_type"):
+            _normalize_molecule_type("rdkit")
+
+    def test_molecule_class_for_type(self):
+        assert _molecule_class_for_type("oeqmol") is oechem.OEQMol
+
+    def test_new_molecule_uses_selected_class(self):
+        assert isinstance(_new_molecule("oe_graph_mol"), oechem.OEGraphMol)
+
+    def test_coerce_molecule_uses_selected_class(self):
+        mol = oechem.OEMol()
+        assert oechem.OEParseSmiles(mol, "CCO")
+
+        coerced = _coerce_molecule(mol, "oeqmol")
+
+        assert isinstance(coerced, oechem.OEQMol)
+        assert oechem.OEMolToSmiles(coerced) == "CCO"
+
+    def test_copy_molecule_can_clear_titles_without_mutating_source(self):
+        mol = oechem.OEMol()
+        assert oechem.OEParseSmiles(mol, "CCO")
+        mol.SetTitle("parent")
+        mol.GetActive().SetTitle("active")
+
+        copied = _copy_molecule(mol, no_title=True)
+
+        assert isinstance(copied, oechem.OEMol)
+        assert copied is not mol
+        assert copied.GetTitle() == ""
+        assert copied.GetActive().GetTitle() == ""
+        assert mol.GetTitle() == "parent"
+        assert mol.GetActive().GetTitle() == "active"
 
 
 class TestMoleculeTypeSeries:

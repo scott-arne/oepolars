@@ -44,14 +44,41 @@ from oepolars.exceptions import (  # noqa: E402
     OEPolarsError,
     UnsupportedFileFormat,
 )
-from oepolars.io import from_pandas, read_molecule_csv, read_oeb, read_oedb, read_oedu, read_parquet, read_sdf, read_smi, scan_molecule_csv, scan_oeb, scan_oedb, scan_oedu, scan_parquet, scan_sdf, scan_smi  # noqa: E402
-from oepolars.types import DesignUnitType, DisplayType, FingerprintType, MoleculeType  # noqa: E402
+from oepolars.io import (  # noqa: E402
+    from_pandas,
+    read_molecule_csv,
+    read_oeb,
+    read_oedb,
+    read_oedu,
+    read_parquet,
+    read_sdf,
+    read_smi,
+    scan_molecule_csv,
+    scan_oeb,
+    scan_oedb,
+    scan_oedu,
+    scan_parquet,
+    scan_sdf,
+    scan_smi,
+)
+from oepolars.types import (  # noqa: E402
+    DesignUnitType,
+    DisplayType,
+    FingerprintType,
+    MoleculeType,
+    MoleculeTypeKind,
+    QueryFormat,
+    QueryType,
+)
 
 __all__ = [
     # Version
     "__version__",
     # Extension types
     "MoleculeType",
+    "MoleculeTypeKind",
+    "QueryType",
+    "QueryFormat",
     "DesignUnitType",
     "DisplayType",
     "FingerprintType",
