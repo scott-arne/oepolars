@@ -14,6 +14,7 @@ from oepolars.io.readers import (
     read_sdf,
     read_smi,
 )
+from oepolars.types.molecule import MoleculeTypeInput
 
 # Type alias for file paths
 FilePath = str | Path
@@ -28,6 +29,8 @@ def scan_sdf(
     sd_data: bool = True,
     usecols: Iterable[str] | None = None,
     numeric_columns: Iterable[str] | None = None,
+    molecule_type: MoleculeTypeInput = None,
+    no_title: bool = False,
 ) -> pl.LazyFrame:
     """Lazily read molecules from an SDF file.
 
@@ -41,6 +44,8 @@ def scan_sdf(
     :param sd_data: Whether to read SD data tags as columns.
     :param usecols: Specific SD tags to read (None = all).
     :param numeric_columns: SD tag columns to convert to numeric types.
+    :param molecule_type: Molecule implementation to produce.
+    :param no_title: Do not read molecule titles.
     :returns: LazyFrame with molecule column and optional SD data.
     :raises FileError: If the file cannot be read.
 
@@ -57,6 +62,8 @@ def scan_sdf(
         sd_data=sd_data,
         usecols=usecols,
         numeric_columns=numeric_columns,
+        molecule_type=molecule_type,
+        no_title=no_title,
     )
     return df.lazy()
 
@@ -69,6 +76,8 @@ def scan_oeb(
     sd_data: bool = True,
     usecols: Iterable[str] | None = None,
     numeric_columns: Iterable[str] | None = None,
+    molecule_type: MoleculeTypeInput = None,
+    no_title: bool = False,
 ) -> pl.LazyFrame:
     """Lazily read molecules from an OEB file.
 
@@ -81,6 +90,8 @@ def scan_oeb(
     :param sd_data: Whether to read SD data tags as columns.
     :param usecols: Specific SD tags to read (None = all).
     :param numeric_columns: SD tag columns to convert to numeric types.
+    :param molecule_type: Molecule implementation to produce.
+    :param no_title: Do not read molecule titles.
     :returns: LazyFrame with molecule column and optional SD data.
     :raises FileError: If the file cannot be read.
 
@@ -96,6 +107,8 @@ def scan_oeb(
         sd_data=sd_data,
         usecols=usecols,
         numeric_columns=numeric_columns,
+        molecule_type=molecule_type,
+        no_title=no_title,
     )
     return df.lazy()
 
@@ -105,6 +118,8 @@ def scan_smi(
     *,
     molecule_column: str = "Molecule",
     title_column: str | None = "Title",
+    molecule_type: MoleculeTypeInput = None,
+    no_title: bool = False,
 ) -> pl.LazyFrame:
     """Lazily read molecules from a SMILES file.
 
@@ -114,6 +129,8 @@ def scan_smi(
     :param filepath: Path to the SMILES file.
     :param molecule_column: Name for the molecule column.
     :param title_column: Name for the title column, or None to skip.
+    :param molecule_type: Molecule implementation to produce.
+    :param no_title: Do not read molecule titles.
     :returns: LazyFrame with molecule column and optional title.
     :raises FileError: If the file cannot be read.
 
@@ -126,6 +143,8 @@ def scan_smi(
         filepath,
         molecule_column=molecule_column,
         title_column=title_column,
+        molecule_type=molecule_type,
+        no_title=no_title,
     )
     return df.lazy()
 
@@ -171,6 +190,8 @@ def scan_oedb(
     sd_data: bool = True,
     usecols: Iterable[str] | None = None,
     numeric_columns: Iterable[str] | None = None,
+    molecule_type: MoleculeTypeInput = None,
+    no_title: bool = False,
 ) -> pl.LazyFrame:
     """Lazily read molecules from an OEDB file.
 
@@ -183,6 +204,8 @@ def scan_oedb(
     :param sd_data: Whether to read SD data tags as columns.
     :param usecols: Specific SD tags to read (None = all).
     :param numeric_columns: SD tag columns to convert to numeric types.
+    :param molecule_type: Molecule implementation to produce.
+    :param no_title: Do not read molecule titles.
     :returns: LazyFrame with molecule column and optional SD data.
     :raises FileError: If the file cannot be read.
 
@@ -198,6 +221,8 @@ def scan_oedb(
         sd_data=sd_data,
         usecols=usecols,
         numeric_columns=numeric_columns,
+        molecule_type=molecule_type,
+        no_title=no_title,
     )
     return df.lazy()
 

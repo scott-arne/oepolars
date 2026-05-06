@@ -9,6 +9,13 @@ from openeye import oechem
 
 from oepolars.exceptions import FileError
 from oepolars.types import DesignUnitType, MoleculeType
+from oepolars.types.molecule import (
+    MoleculeTypeInput,
+    _clear_mol_titles,
+    _coerce_molecule,
+    _new_molecule,
+    _normalize_molecule_type,
+)
 from oepolars.util import bytes_to_mol
 
 log = logging.getLogger("oepolars")
@@ -71,6 +78,26 @@ def _collect_sd_data(
             sd_data_dict[tag].append(None)
 
 
+def _copy_stream_molecule(
+    mol: oechem.OEMolBase,
+    molecule_type: MoleculeTypeInput,
+    *,
+    no_title: bool,
+) -> oechem.OEMolBase:
+    """Copy a stream-owned molecule for DataFrame storage.
+
+    :param mol: Stream-owned molecule to copy.
+    :param molecule_type: Molecule type selector.
+    :param no_title: Clear molecule titles on the returned value.
+    :returns: Independent molecule instance for DataFrame storage.
+    """
+    copied = oechem.OEMol(mol)
+    result = _coerce_molecule(copied, molecule_type)
+    if no_title:
+        _clear_mol_titles(result)
+    return result
+
+
 def _build_molecule_dataframe(
     molecules: list,
     titles: list | None,
@@ -122,7 +149,8 @@ def read_sdf(
     sd_data: bool = True,
     usecols: Iterable[str] | None = None,
     numeric_columns: Iterable[str] | None = None,
-    no_title: bool = False
+    molecule_type: MoleculeTypeInput = None,
+    no_title: bool = False,
 ) -> pl.DataFrame:
     """Read molecules from an SDF file into a DataFrame.
 
@@ -134,6 +162,7 @@ def read_sdf(
     :param usecols: Specific SD tags to read (None = all).
     :param numeric_columns: SD tag columns to convert to numeric types. Invalid values
         that cannot be converted to numeric are silently converted to null.
+    :param molecule_type: Molecule implementation to produce.
     :param no_title: Do not read molecule titles.
     :returns: DataFrame with molecule column and optional SD data.
     :raises FileError: If the file cannot be read.
@@ -145,9 +174,10 @@ def read_sdf(
     """
     path = _validate_path(filepath)
     usecols_set = set(usecols) if usecols is not None else None
+    normalized_molecule_type = _normalize_molecule_type(molecule_type)
 
-    molecules = []
-    titles = None if no_title else []
+    molecules: list[oechem.OEMolBase] = []
+    titles: list[str] | None = None if no_title else []
     sd_data_dict: dict[str, list] = {}
 
     with oechem.oemolistream(str(path)) as ifs:
@@ -155,13 +185,15 @@ def read_sdf(
             ifs.SetFlavor(oechem.OEFormat_SDF, flavor)
 
         for mol in ifs.GetOEMols():
-            if no_title:
-                mol.SetTitle('')
-                mol.GetActive().SetTitle('')
+            molecules.append(
+                _copy_stream_molecule(
+                    mol,
+                    normalized_molecule_type,
+                    no_title=no_title,
+                )
+            )
 
-            molecules.append(oechem.OEMol(mol))
-
-            if not no_title:
+            if titles is not None:
                 titles.append(mol.GetTitle())
 
             if sd_data:
@@ -182,6 +214,7 @@ def read_oeb(
     sd_data: bool = True,
     usecols: Iterable[str] | None = None,
     numeric_columns: Iterable[str] | None = None,
+    molecule_type: MoleculeTypeInput = None,
     no_title: bool = False,
 ) -> pl.DataFrame:
     """Read molecules from an OEB file into a DataFrame.
@@ -195,6 +228,7 @@ def read_oeb(
     :param usecols: Specific SD tags to read (None = all).
     :param numeric_columns: SD tag columns to convert to numeric types. Invalid values
         that cannot be converted to numeric are silently converted to null.
+    :param molecule_type: Molecule implementation to produce.
     :param no_title: Do not read molecule titles.
     :returns: DataFrame with molecule column and optional SD data.
     :raises FileError: If the file cannot be read.
@@ -205,20 +239,23 @@ def read_oeb(
     """
     path = _validate_path(filepath)
     usecols_set = set(usecols) if usecols is not None else None
+    normalized_molecule_type = _normalize_molecule_type(molecule_type)
 
-    molecules = []
-    titles = None if no_title else []
+    molecules: list[oechem.OEMolBase] = []
+    titles: list[str] | None = None if no_title else []
     sd_data_dict: dict[str, list] = {}
 
     with oechem.oemolistream(str(path)) as ifs:
         for mol in ifs.GetOEMols():
-            if no_title:
-                mol.SetTitle('')
-                mol.GetActive().SetTitle('')
+            molecules.append(
+                _copy_stream_molecule(
+                    mol,
+                    normalized_molecule_type,
+                    no_title=no_title,
+                )
+            )
 
-            molecules.append(oechem.OEMol(mol))
-
-            if not no_title:
+            if titles is not None:
                 titles.append(mol.GetTitle())
 
             if sd_data:
@@ -237,6 +274,8 @@ def read_molecule_csv(
     smiles_column: str,
     molecule_column: str = "Molecule",
     drop_smiles: bool = True,
+    molecule_type: MoleculeTypeInput = None,
+    no_title: bool = False,
     **csv_kwargs,
 ) -> pl.DataFrame:
     """Read a CSV file and convert a SMILES column to molecules.
@@ -248,6 +287,8 @@ def read_molecule_csv(
     :param smiles_column: Name of the column containing SMILES strings.
     :param molecule_column: Name for the new molecule column.
     :param drop_smiles: If True (default), remove the original SMILES column.
+    :param molecule_type: Molecule implementation to produce.
+    :param no_title: Clear molecule titles on returned values.
     :param csv_kwargs: Additional arguments passed to ``pl.read_csv()``.
     :returns: DataFrame with molecule column and other CSV data.
     :raises FileError: If the file cannot be read.
@@ -257,19 +298,22 @@ def read_molecule_csv(
         df = oep.read_molecule_csv("data.csv", smiles_column="SMILES")
     """
     path = _validate_path(filepath)
+    normalized_molecule_type = _normalize_molecule_type(molecule_type)
 
     # Read CSV with Polars
     df = pl.read_csv(path, **csv_kwargs)
 
     # Parse SMILES strings to molecules
     smiles_values = df[smiles_column].to_list()
-    molecules = []
+    molecules: list[oechem.OEMolBase | None] = []
     for smiles in smiles_values:
         if smiles is None:
             molecules.append(None)
         else:
-            mol = oechem.OEMol()
+            mol = _new_molecule(normalized_molecule_type)
             if oechem.OEParseSmiles(mol, smiles):
+                if no_title:
+                    _clear_mol_titles(mol)
                 molecules.append(mol)
             else:
                 log.warning("Failed to parse SMILES: %s", smiles)
@@ -293,6 +337,7 @@ def read_smi(
     *,
     molecule_column: str = "Molecule",
     title_column: str | None = "Title",
+    molecule_type: MoleculeTypeInput = None,
     no_title: bool = False,
 ) -> pl.DataFrame:
     """Read molecules from a SMILES file into a DataFrame.
@@ -303,6 +348,7 @@ def read_smi(
     :param filepath: Path to the SMILES file.
     :param molecule_column: Name for the molecule column.
     :param title_column: Name for the title column, or None to skip.
+    :param molecule_type: Molecule implementation to produce.
     :param no_title: Do not read molecule titles.
     :returns: DataFrame with molecule column and optional title.
     :raises FileError: If the file cannot be read.
@@ -312,19 +358,22 @@ def read_smi(
         df = oep.read_smi("molecules.smi")
     """
     path = _validate_path(filepath)
+    normalized_molecule_type = _normalize_molecule_type(molecule_type)
 
-    molecules = []
-    titles = None if no_title else []
+    molecules: list[oechem.OEMolBase] = []
+    titles: list[str] | None = None if no_title else []
 
     with oechem.oemolistream(str(path)) as ifs:
         for mol in ifs.GetOEMols():
-            if no_title:
-                mol.SetTitle('')
-                mol.GetActive().SetTitle('')
+            molecules.append(
+                _copy_stream_molecule(
+                    mol,
+                    normalized_molecule_type,
+                    no_title=no_title,
+                )
+            )
 
-            molecules.append(oechem.OEMol(mol))
-
-            if not no_title:
+            if titles is not None:
                 titles.append(mol.GetTitle())
 
     log.debug(f"Read {len(molecules)} molecules from {filepath}")
@@ -342,6 +391,7 @@ def read_oedb(
     sd_data: bool = True,
     usecols: Iterable[str] | None = None,
     numeric_columns: Iterable[str] | None = None,
+    molecule_type: MoleculeTypeInput = None,
     no_title: bool = False,
 ) -> pl.DataFrame:
     """Read molecules from an OEDB file into a DataFrame.
@@ -355,6 +405,7 @@ def read_oedb(
     :param usecols: Specific SD tags to read (None = all).
     :param numeric_columns: SD tag columns to convert to numeric types. Invalid values
         that cannot be converted to numeric are silently converted to null.
+    :param molecule_type: Molecule implementation to produce.
     :param no_title: Do not read molecule titles.
     :returns: DataFrame with molecule column and optional SD data.
     :raises FileError: If the file cannot be read.
@@ -365,9 +416,10 @@ def read_oedb(
     """
     path = _validate_path(filepath)
     usecols_set = set(usecols) if usecols is not None else None
+    normalized_molecule_type = _normalize_molecule_type(molecule_type)
 
-    molecules = []
-    titles = None if no_title else []
+    molecules: list[oechem.OEMolBase] = []
+    titles: list[str] | None = None if no_title else []
     sd_data_dict: dict[str, list] = {}
 
     with oechem.oemolistream() as ifs:
@@ -377,13 +429,15 @@ def read_oedb(
             raise FileError(f"Failed to open file: {filepath}")
 
         for mol in ifs.GetOEMols():
-            if no_title:
-                mol.SetTitle('')
-                mol.GetActive().SetTitle('')
+            molecules.append(
+                _copy_stream_molecule(
+                    mol,
+                    normalized_molecule_type,
+                    no_title=no_title,
+                )
+            )
 
-            molecules.append(oechem.OEMol(mol))
-
-            if not no_title:
+            if titles is not None:
                 titles.append(mol.GetTitle())
 
             if sd_data:
@@ -420,19 +474,19 @@ def read_oedu(
     """
     path = _validate_path(filepath)
 
-    design_units = []
-    titles = None if no_title else []
+    design_units: list[oechem.OEDesignUnit] = []
+    titles: list[str] | None = None if no_title else []
 
     ifs = oechem.oeifstream(str(path))
     try:
         du = oechem.OEDesignUnit()
         while oechem.OEReadDesignUnit(ifs, du):
             if no_title:
-                du.SetTitle('')
+                du.SetTitle("")
 
             design_units.append(oechem.OEDesignUnit(du))
 
-            if not no_title:
+            if titles is not None:
                 titles.append(du.GetTitle())
     finally:
         ifs.close()

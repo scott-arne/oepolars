@@ -4,9 +4,9 @@ from pathlib import Path
 
 import polars as pl
 import pytest
+from openeye import oechem
 
 import oepolars as oep
-
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 
@@ -126,10 +126,33 @@ class TestScanSMI:
         assert "Molecule" in df.columns
         assert df.schema["Molecule"].ext_name() == "molecule"
 
+    def test_scan_smi_molecule_type_class_returns_graph_mols(self):
+        lf = oep.scan_smi(
+            FIXTURES_DIR / "sample.smi",
+            molecule_type=oechem.OEGraphMol,
+        )
+        df = lf.collect()
+
+        assert all(
+            isinstance(mol, oechem.OEGraphMol)
+            for mol in df["Molecule"].to_list()
+        )
+
     def test_scan_smi_has_title_column(self):
         lf = oep.scan_smi(FIXTURES_DIR / "sample.smi")
         df = lf.collect()
         assert "Title" in df.columns
+
+    def test_scan_smi_no_title_clears_molecule_titles(self):
+        lf = oep.scan_smi(FIXTURES_DIR / "sample.smi", no_title=True)
+        df = lf.collect()
+
+        assert "Title" not in df.columns
+        assert all(mol.GetTitle() == "" for mol in df["Molecule"].to_list())
+        assert all(
+            mol.GetActive().GetTitle() == ""
+            for mol in df["Molecule"].to_list()
+        )
 
     def test_scan_smi_supports_filter(self):
         lf = oep.scan_smi(FIXTURES_DIR / "sample.smi")

@@ -1,14 +1,12 @@
 """Tests for pandas interoperability."""
 
+import oepandas as oepd
 import pandas as pd
 import polars as pl
-import pytest
 from openeye import oechem
 
-import oepandas as oepd
 import oepolars as oepl
-from oepolars.types import MoleculeType
-
+from oepolars.types import QueryType
 
 FIXTURES_DIR = "tests/fixtures"
 
@@ -83,7 +81,7 @@ class TestFromPandas:
         pl_smiles = result["Molecule"].chem.to_smiles().to_list()
 
         # Compare
-        for i, (ps, pls) in enumerate(zip(pd_smiles, pl_smiles)):
+        for i, (ps, pls) in enumerate(zip(pd_smiles, pl_smiles, strict=False)):
             assert ps == pls, f"SMILES mismatch at index {i}: {ps} != {pls}"
 
     def test_from_pandas_with_multiple_molecule_columns(self):
@@ -154,3 +152,15 @@ class TestFromPandas:
 
         assert result.schema["Molecule"].ext_name() == "molecule"
         assert len(result) > 0
+
+    def test_from_pandas_converts_query_column(self):
+        """Test that OEPandas query columns are converted to QueryType."""
+        query_array = oepd.QueryArray.from_sequence_of_strings(["[#6]"])
+        pd_df = pd.DataFrame({"Query": query_array})
+        source_query = pd_df["Query"].iloc[0]
+
+        result = oepl.from_pandas(pd_df)
+
+        assert result.schema["Query"] == QueryType()
+        assert isinstance(result["Query"][0], oechem.OEQMol)
+        assert result["Query"][0] is not source_query

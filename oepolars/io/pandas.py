@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import polars as pl
 from openeye import oechem, oedepict
 
-from oepolars.types import DesignUnitType, DisplayType, MoleculeType
+from oepolars.types import DesignUnitType, DisplayType, MoleculeType, QueryType
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -18,6 +18,7 @@ def from_pandas(df: pd.DataFrame) -> pl.DataFrame:
 
     Automatically detects and converts OEPandas extension dtype columns:
     - ``MoleculeDtype`` -> ``MoleculeType``
+    - ``QueryDtype`` -> ``QueryType``
     - ``DesignUnitDtype`` -> ``DesignUnitType``
     - ``DisplayDtype`` -> ``DisplayType``
 
@@ -38,6 +39,7 @@ def from_pandas(df: pd.DataFrame) -> pl.DataFrame:
     """
     # Detect OEPandas extension dtype columns
     molecule_cols: set[str] = set()
+    query_cols: set[str] = set()
     design_unit_cols: set[str] = set()
     display_cols: set[str] = set()
 
@@ -45,12 +47,12 @@ def from_pandas(df: pd.DataFrame) -> pl.DataFrame:
         dtype_name = getattr(df[col].dtype, "name", None)
         if dtype_name == "molecule":
             molecule_cols.add(col)
+        elif dtype_name == "query":
+            query_cols.add(col)
         elif dtype_name == "design_unit":
             design_unit_cols.add(col)
         elif dtype_name == "display":
             display_cols.add(col)
-
-    openeye_cols = molecule_cols | design_unit_cols | display_cols
 
     # Build Polars DataFrame column by column
     polars_series: list[pl.Series] = []
@@ -64,6 +66,15 @@ def from_pandas(df: pd.DataFrame) -> pl.DataFrame:
                 for v in values
             ]
             polars_series.append(pl.Series(col, molecules, dtype=MoleculeType()))
+
+        elif col in query_cols:
+            # Convert OEPandas query column to OEPolars QueryType
+            values = df[col].tolist()
+            queries = [
+                oechem.OEQMol(v) if isinstance(v, oechem.OEMolBase) else None
+                for v in values
+            ]
+            polars_series.append(pl.Series(col, queries, dtype=QueryType()))
 
         elif col in design_unit_cols:
             # Convert OEPandas design unit column to OEPolars DesignUnitType

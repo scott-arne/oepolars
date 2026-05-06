@@ -4,6 +4,7 @@ from pathlib import Path
 
 import polars as pl
 import pytest
+from openeye import oechem
 
 import oepolars as oep
 
@@ -34,6 +35,17 @@ class TestReadSDF:
         df = oep.read_sdf(FIXTURES_DIR / "sample.sdf", molecule_column="Mol")
         assert "Mol" in df.columns
         assert df.schema["Mol"].ext_name() == "molecule"
+
+    def test_read_sdf_molecule_type_string_returns_graph_mols(self):
+        df = oep.read_sdf(
+            FIXTURES_DIR / "sample.sdf",
+            molecule_type="oegraphmol",
+        )
+
+        assert all(
+            isinstance(mol, oechem.OEGraphMol)
+            for mol in df["Molecule"].to_list()
+        )
 
     def test_read_sdf_no_title_column(self):
         df = oep.read_sdf(FIXTURES_DIR / "sample.sdf", title_column=None)
@@ -143,6 +155,17 @@ class TestReadSMI:
         assert "Mol" in df.columns
         assert df.schema["Mol"].ext_name() == "molecule"
 
+    def test_read_smi_molecule_type_class_returns_graph_mols(self):
+        df = oep.read_smi(
+            FIXTURES_DIR / "sample.smi",
+            molecule_type=oechem.OEGraphMol,
+        )
+
+        assert all(
+            isinstance(mol, oechem.OEGraphMol)
+            for mol in df["Molecule"].to_list()
+        )
+
     def test_read_smi_no_title_column(self):
         df = oep.read_smi(FIXTURES_DIR / "sample.smi", title_column=None)
         assert "Title" not in df.columns
@@ -157,8 +180,8 @@ class TestReadSMI:
         assert len(df) == 3
 
     def test_read_smi_empty_file(self):
-        import tempfile
         import os
+        import tempfile
         with tempfile.NamedTemporaryFile(suffix=".smi", delete=False) as f:
             pass
         df = oep.read_smi(f.name)
@@ -204,6 +227,23 @@ class TestReadMoleculeCSV:
     def test_read_molecule_csv_molecule_count(self):
         df = oep.read_molecule_csv(FIXTURES_DIR / "sample.csv", smiles_column="smiles")
         assert len(df) == 3
+
+    def test_read_molecule_csv_no_title_clears_parent_and_active_titles(
+        self,
+        tmp_path,
+    ):
+        csv_path = tmp_path / "titled_smiles.csv"
+        csv_path.write_text('smiles\n"CCO ethanol"\n')
+
+        df = oep.read_molecule_csv(
+            csv_path,
+            smiles_column="smiles",
+            no_title=True,
+        )
+
+        mol = df["Molecule"][0]
+        assert mol.GetTitle() == ""
+        assert mol.GetActive().GetTitle() == ""
 
 
 class TestReadOEDB:
@@ -351,6 +391,7 @@ class TestReadParquet:
     def molecule_dataframe(self):
         """Create a DataFrame with molecule columns for testing."""
         from openeye import oechem
+
         from oepolars import MoleculeType
 
         mols = []
@@ -397,6 +438,7 @@ class TestReadParquet:
     def test_read_parquet_handles_nulls(self, tmp_path):
         """Test that null bytes become null molecules."""
         from openeye import oechem
+
         from oepolars import MoleculeType
 
         mol = oechem.OEMol()
@@ -419,6 +461,7 @@ class TestReadParquet:
     def test_read_parquet_with_multiple_molecule_columns(self, tmp_path):
         """Test that multiple molecule columns work correctly."""
         from openeye import oechem
+
         from oepolars import MoleculeType
 
         mol1 = oechem.OEMol()
