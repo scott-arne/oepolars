@@ -4,7 +4,7 @@ from openeye import oechem
 
 # Import to register namespace
 import oepolars  # noqa: F401
-from oepolars import DesignUnitType, MoleculeType
+from oepolars import DesignUnitType, MoleculeType, MoleculeTypeKind, QueryFormat, QueryType
 from oepolars.exceptions import InvalidSMARTS
 
 
@@ -54,7 +54,7 @@ class TestSeriesIsValid:
 
     def test_is_valid_wrong_type_raises(self):
         s = pl.Series("x", ["a", "b", "c"])
-        with pytest.raises(TypeError, match="MoleculeType or DesignUnitType"):
+        with pytest.raises(TypeError, match="MoleculeType, QueryType, or DesignUnitType"):
             s.chem.is_valid()
 
     def test_is_valid_empty_series(self):
@@ -72,7 +72,102 @@ class TestSeriesIsValid:
         du = oechem.OEDesignUnit()
         s = pl.Series("du", [du, None], dtype=DesignUnitType())
         result = s.chem.is_valid()
+        assert result.to_list() == [False, False]
+
+    def test_is_valid_with_query_type(self):
+        query = oechem.OEQMol()
+        assert oechem.OEParseSmarts(query, "[#6]")
+        s = pl.Series("query", [query, None], dtype=QueryType())
+
+        result = s.chem.is_valid()
+
         assert result.to_list() == [True, False]
+
+
+class TestSeriesAsMolecule:
+    def test_as_molecule_existing_molecule_type_returns_same_series(self):
+        mol = oechem.OEMol()
+        assert oechem.OEParseSmiles(mol, "CCO")
+        s = pl.Series("mol", [mol], dtype=MoleculeType())
+
+        result = s.chem.as_molecule()
+
+        assert result is s
+
+    def test_as_molecule_with_molecule_type_returns_graph_mol_values(self):
+        s = pl.Series("smiles", ["CCO"])
+
+        result = s.chem.as_molecule(molecule_type=MoleculeTypeKind.OEGRAPHMOL)
+
+        assert result.dtype.ext_name() == "molecule"
+        assert isinstance(result[0], oechem.OEGraphMol)
+
+    def test_as_molecule_preserves_existing_graph_mol_from_object_series(self):
+        mol = oechem.OEGraphMol()
+        assert oechem.OEParseSmiles(mol, "CCO")
+        s = pl.Series("mol", [mol], dtype=pl.Object)
+
+        result = s.chem.as_molecule()
+
+        assert result.dtype.ext_name() == "molecule"
+        assert isinstance(result[0], oechem.OEGraphMol)
+
+    def test_as_molecule_no_title_clears_copy_not_source(self):
+        mol = oechem.OEMol()
+        assert oechem.OEParseSmiles(mol, "CCO")
+        mol.SetTitle("parent")
+        mol.GetActive().SetTitle("active")
+        s = pl.Series("mol", [mol], dtype=MoleculeType())
+
+        result = s.chem.as_molecule(no_title=True)
+
+        assert result[0] is not mol
+        assert result[0].GetTitle() == ""
+        assert result[0].GetActive().GetTitle() == ""
+        assert mol.GetTitle() == "parent"
+        assert mol.GetActive().GetTitle() == "active"
+
+
+class TestSeriesAsQuery:
+    def test_as_query_from_smarts(self):
+        s = pl.Series("query", ["[#6]-[#8]", None])
+
+        result = s.chem.as_query()
+
+        assert result.dtype.ext_name() == "query"
+        assert isinstance(result[0], oechem.OEQMol)
+        assert result[0].IsValid()
+        assert result[1] is None
+
+    def test_as_query_from_smirks(self):
+        s = pl.Series("query", ["[#6:1]-[#8:2]>>[#6:1]=[#8:2]"])
+
+        result = s.chem.as_query(query_format=QueryFormat.SMIRKS)
+
+        assert result.dtype.ext_name() == "query"
+        assert isinstance(result[0], oechem.OEQMol)
+        assert result[0].IsValid()
+
+    def test_as_query_existing_query_type_returns_same_series(self):
+        query = oechem.OEQMol()
+        assert oechem.OEParseSmarts(query, "[#6]")
+        s = pl.Series("query", [query], dtype=QueryType())
+
+        result = s.chem.as_query()
+
+        assert result is s
+
+    def test_as_query_no_title_clears_copy_not_source(self):
+        query = oechem.OEQMol()
+        assert oechem.OEParseSmarts(query, "[#6]")
+        query.SetTitle("source")
+        s = pl.Series("query", [query], dtype=QueryType())
+
+        result = s.chem.as_query(no_title=True)
+
+        assert result[0] is not query
+        assert result[0].GetTitle() == ""
+        assert query.GetTitle() == "source"
 
 
 class TestSeriesToSmiles:
@@ -153,6 +248,15 @@ class TestSeriesSubsearch:
     def test_subsearch_with_oesub_search_object(self, molecule_series):
         ss = oechem.OESubSearch("c1ccccc1")
         result = molecule_series.chem.subsearch(ss)
+        expected = [False, True, False, True]
+        assert result.to_list() == expected
+
+    def test_substructure_search_accepts_oeqmol(self, molecule_series):
+        query = oechem.OEQMol()
+        assert oechem.OEParseSmarts(query, "c1ccccc1")
+
+        result = molecule_series.chem.substructure_search(query)
+
         expected = [False, True, False, True]
         assert result.to_list() == expected
 
@@ -285,6 +389,13 @@ class TestSeriesDesignUnitOperations:
         s = pl.Series("x", ["a", "b", "c"])
         with pytest.raises(TypeError, match="DesignUnitType"):
             s.chem.get_components(oechem.OEDesignUnitComponents_Ligand)
+
+    def test_get_ligands_rejects_conflicting_title_options(self):
+        du = oechem.OEDesignUnit()
+        s = pl.Series("du", [du], dtype=DesignUnitType())
+
+        with pytest.raises(ValueError, match="clear_titles"):
+            s.chem.get_ligands(no_title=True, clear_titles=False)
 
     def test_get_ligands_with_nulls(self):
         du = oechem.OEDesignUnit()

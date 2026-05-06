@@ -1,7 +1,9 @@
 """Series namespace for OpenEye operations."""
 
 import copy
-from typing import Any
+import logging
+import math
+from typing import Any, cast
 
 import numpy as np
 import polars as pl
@@ -16,6 +18,22 @@ from oepolars.fingerprint import (
     to_numpy_fp,
 )
 from oepolars.types import DesignUnitType, DisplayType, FingerprintType, MoleculeType
+from oepolars.types.molecule import (
+    MoleculeTypeInput,
+    _clear_mol_titles,
+    _copy_molecule,
+    _new_molecule,
+)
+from oepolars.types.query import (
+    QueryFormat,
+    QueryFormatInput,
+    QueryType,
+    _coerce_query,
+    _copy_query,
+)
+from oepolars.util import get_oeformat
+
+log = logging.getLogger("oepolars")
 
 
 # Dictionary to store metadata for Series objects, keyed by object id.
@@ -27,6 +45,11 @@ _series_metadata: dict[int, dict[str, Any]] = {}
 def _is_molecule_type(dtype: pl.DataType) -> bool:
     """Check if dtype is MoleculeType."""
     return hasattr(dtype, "ext_name") and dtype.ext_name() == "molecule"
+
+
+def _is_query_type(dtype: pl.DataType) -> bool:
+    """Check if dtype is QueryType."""
+    return hasattr(dtype, "ext_name") and dtype.ext_name() == "query"
 
 
 def _is_design_unit_type(dtype: pl.DataType) -> bool:
@@ -42,6 +65,84 @@ def _is_display_type(dtype: pl.DataType) -> bool:
 def _is_fingerprint_type(dtype: pl.DataType) -> bool:
     """Check if dtype is FingerprintType."""
     return hasattr(dtype, "ext_name") and dtype.ext_name() == "fingerprint"
+
+
+def _resolve_no_title(no_title: bool, clear_titles: bool | None) -> bool:
+    """Resolve canonical no_title and deprecated clear_titles options."""
+    if clear_titles is None:
+        return no_title
+    if no_title and not clear_titles:
+        raise ValueError("clear_titles conflicts with no_title")
+    return no_title or clear_titles
+
+
+def _is_missing_value(value: object) -> bool:
+    """Check whether a scalar should be treated as missing."""
+    return value is None or (isinstance(value, float) and math.isnan(value))
+
+
+def _parse_molecule_value(
+    value: object,
+    *,
+    molecule_format: int,
+    molecule_type: MoleculeTypeInput,
+    no_title: bool,
+) -> oechem.OEMolBase | None:
+    """Parse or copy a scalar value into molecule storage."""
+    if _is_missing_value(value):
+        return None
+
+    if isinstance(value, oechem.OEMolBase):
+        if molecule_type is None and not no_title:
+            return value
+        return _copy_molecule(value, molecule_type, no_title=no_title)
+
+    mol = _new_molecule(molecule_type)
+    if isinstance(value, str) and molecule_format == oechem.OEFormat_SMI:
+        if oechem.OEParseSmiles(mol, value):
+            if no_title:
+                _clear_mol_titles(mol)
+            return mol
+        log.warning("Failed to parse SMILES: %s", value)
+        return None
+
+    if isinstance(value, bytes):
+        if oechem.OEReadMolFromBytes(mol, molecule_format, False, value):
+            if no_title:
+                _clear_mol_titles(mol)
+            return mol
+        log.warning("Failed to read molecule from bytes")
+        return None
+
+    raise TypeError(f"Cannot create a molecule from {type(value).__name__}")
+
+
+def _valid_openeye_object(value: object) -> bool:
+    """Return whether an OpenEye object is present and valid."""
+    if value is None:
+        return False
+    is_valid = getattr(value, "IsValid", None)
+    if callable(is_valid):
+        return bool(is_valid())
+    return True
+
+
+def _prepare_subsearch(
+    pattern: str | oechem.OEQMol | oechem.OESubSearch,
+) -> oechem.OESubSearch:
+    """Create and validate an OpenEye substructure search object."""
+    ss = (
+        oechem.OESubSearch(pattern)
+        if isinstance(pattern, str | oechem.OEQMol)
+        else pattern
+    )
+
+    if not ss.IsValid():
+        if isinstance(pattern, str):
+            raise InvalidSMARTS(f"Invalid SMARTS pattern: {pattern}")
+        raise InvalidSMARTS("Invalid substructure search pattern")
+
+    return ss
 
 
 @pl.api.register_series_namespace("chem")
@@ -148,11 +249,68 @@ class SeriesChemNamespace:
 
         return new_series
 
-    def is_valid(self) -> pl.Series:
-        """Return a boolean Series indicating valid (non-null) molecules.
+    def as_molecule(
+        self,
+        molecule_format: str | int | None = None,
+        molecule_type: MoleculeTypeInput = None,
+        *,
+        no_title: bool = False,
+    ) -> pl.Series:
+        """Convert this Series to molecule values.
 
-        :returns: Boolean Series where True indicates a valid molecule.
-        :raises TypeError: If the Series is not a MoleculeType or DesignUnitType.
+        :param molecule_format: OpenEye format constant or name for parsing.
+            Defaults to SMILES.
+        :param molecule_type: Molecule implementation to produce.
+        :param no_title: Clear molecule titles on returned values.
+        :returns: MoleculeType Series.
+        """
+        if _is_molecule_type(self._series.dtype) and molecule_type is None and not no_title:
+            return self._series
+
+        fmt = get_oeformat(molecule_format or oechem.OEFormat_SMI, gzip=False).oeformat
+        molecules = [
+            _parse_molecule_value(
+                value,
+                molecule_format=fmt,
+                molecule_type=molecule_type,
+                no_title=no_title,
+            )
+            for value in self._series.to_list()
+        ]
+        return pl.Series(self._series.name, molecules, dtype=MoleculeType())
+
+    def as_query(
+        self,
+        query_format: QueryFormatInput = QueryFormat.SMARTS,
+        *,
+        no_title: bool = False,
+    ) -> pl.Series:
+        """Convert this Series to query molecule values.
+
+        :param query_format: Query string format for string values.
+        :param no_title: Clear query titles on returned values.
+        :returns: QueryType Series.
+        """
+        if _is_query_type(self._series.dtype) and not no_title:
+            return self._series
+
+        def convert(value: object) -> oechem.OEQMol | None:
+            query = _coerce_query(value, query_format)
+            if query is None:
+                return None
+            if no_title:
+                return _copy_query(query, no_title=True)
+            return query
+
+        queries = [convert(value) for value in self._series.to_list()]
+        return pl.Series(self._series.name, queries, dtype=QueryType())
+
+    def is_valid(self) -> pl.Series:
+        """Return a boolean Series indicating valid OpenEye objects.
+
+        :returns: Boolean Series where True indicates a valid object.
+        :raises TypeError: If the Series is not a MoleculeType, QueryType, or
+            DesignUnitType.
 
         Example::
 
@@ -161,12 +319,21 @@ class SeriesChemNamespace:
             # [true, false, true]
         """
         dtype = self._series.dtype
-        if not (_is_molecule_type(dtype) or _is_design_unit_type(dtype)):
+        if not (
+            _is_molecule_type(dtype)
+            or _is_query_type(dtype)
+            or _is_design_unit_type(dtype)
+        ):
             raise TypeError(
-                f"is_valid() requires MoleculeType or DesignUnitType, got {dtype}"
+                "is_valid() requires MoleculeType, QueryType, or DesignUnitType, "
+                f"got {dtype}"
             )
 
-        return self._series.is_not_null()
+        return self._series.map_elements(
+            _valid_openeye_object,
+            return_dtype=pl.Boolean,
+        ).fill_null(False)
+
 
     def to_smiles(self, flavor: int = oechem.OESMILESFlag_ISOMERIC) -> pl.Series:
         """Generate SMILES strings from molecules.
@@ -190,7 +357,7 @@ class SeriesChemNamespace:
         def mol_to_smiles(mol: oechem.OEMolBase | None) -> str | None:
             if mol is None:
                 return None
-            return oechem.OECreateSmiString(mol, flavor)
+            return cast(str, oechem.OECreateSmiString(mol, flavor))
 
         return self._series.map_elements(
             mol_to_smiles,
@@ -199,13 +366,13 @@ class SeriesChemNamespace:
 
     def subsearch(
         self,
-        pattern: str | oechem.OESubSearch,
+        pattern: str | oechem.OEQMol | oechem.OESubSearch,
         *,
         adjustH: bool = False,
     ) -> pl.Series:
         """Perform substructure search on molecules.
 
-        :param pattern: SMARTS pattern string or OESubSearch object.
+        :param pattern: SMARTS pattern string, OEQMol, or OESubSearch object.
         :param adjustH: If True, adjust implicit/explicit hydrogens to match query.
         :returns: Boolean Series where True indicates a substructure match.
         :raises TypeError: If the Series is not a MoleculeType.
@@ -223,23 +390,58 @@ class SeriesChemNamespace:
                 f"subsearch() requires MoleculeType, got {self._series.dtype}"
             )
 
-        # Create OESubSearch object if string pattern provided
-        if isinstance(pattern, str):
-            ss = oechem.OESubSearch()
-            if not ss.Init(pattern):
-                raise InvalidSMARTS(f"Invalid SMARTS pattern: {pattern}")
-        else:
-            ss = pattern
+        ss = _prepare_subsearch(pattern)
 
-        def match_mol(mol: oechem.OEMolBase) -> bool:
-            if adjustH:
-                oechem.OEPrepareSearch(mol, ss)
-            return ss.SingleMatch(mol)
+        def match_mol(mol: oechem.OEMolBase | None) -> bool:
+            if mol is None or not mol.IsValid():
+                return False
+            try:
+                oechem.OEPrepareSearch(mol, ss, adjustH)
+                return bool(ss.SingleMatch(mol))
+            except Exception:
+                return False
 
         return self._series.map_elements(
             match_mol,
             return_dtype=pl.Boolean,
         ).fill_null(False)
+
+    def substructure_search(
+        self,
+        pattern: str | oechem.OEQMol | oechem.OESubSearch,
+        *,
+        adjustH: bool = False,
+    ) -> pl.Series:
+        """Perform substructure search on molecules.
+
+        :param pattern: SMARTS pattern string, OEQMol, or OESubSearch object.
+        :param adjustH: If True, adjust implicit/explicit hydrogens to match query.
+        :returns: Boolean Series where True indicates a substructure match.
+        :raises TypeError: If the Series is not a MoleculeType.
+        :raises InvalidSMARTS: If the pattern is invalid.
+        """
+        return self.subsearch(pattern, adjustH=adjustH)
+
+    def substructure_filter(
+        self,
+        pattern: str | oechem.OEQMol | oechem.OESubSearch,
+        *,
+        adjustH: bool = False,
+    ) -> pl.Series:
+        """Filter out molecules matching a substructure.
+
+        :param pattern: SMARTS pattern string, OEQMol, or OESubSearch object.
+        :param adjustH: If True, adjust implicit/explicit hydrogens to match query.
+        :returns: Boolean Series where True indicates no substructure match.
+        :raises TypeError: If the Series is not a MoleculeType.
+        :raises InvalidSMARTS: If the pattern is invalid.
+        """
+        matches = self.substructure_search(pattern, adjustH=adjustH)
+        return pl.Series(
+            self._series.name,
+            [not match for match in matches.to_list()],
+            dtype=pl.Boolean,
+        )
 
     def copy_molecules(self) -> pl.Series:
         """Create deep copies of all molecules in the Series.
@@ -257,10 +459,10 @@ class SeriesChemNamespace:
                 f"copy_molecules() requires MoleculeType, got {self._series.dtype}"
             )
 
-        def copy_mol(mol: oechem.OEMolBase | None) -> oechem.OEMol | None:
+        def copy_mol(mol: oechem.OEMolBase | None) -> oechem.OEMolBase | None:
             if mol is None:
                 return None
-            return oechem.OEMol(mol)
+            return _copy_molecule(mol)
 
         copied = [copy_mol(mol) for mol in self._series.to_list()]
         return pl.Series(self._series.name, copied, dtype=MoleculeType())
@@ -284,13 +486,21 @@ class SeriesChemNamespace:
         copied = [copy_du(du) for du in self._series.to_list()]
         return pl.Series(self._series.name, copied, dtype=DesignUnitType())
 
-    def get_ligands(self, *, clear_titles: bool = False) -> pl.Series:
+    def get_ligands(
+        self,
+        *,
+        no_title: bool = False,
+        clear_titles: bool | None = None,
+    ) -> pl.Series:
         """Extract ligand molecules from design units.
 
-        :param clear_titles: If True, clear the titles of extracted ligands.
+        :param no_title: If True, clear titles on extracted ligands.
+        :param clear_titles: Deprecated alias for ``no_title``.
         :returns: MoleculeType Series containing ligand molecules.
         :raises TypeError: If the Series is not a DesignUnitType.
+        :raises ValueError: If ``no_title`` conflicts with ``clear_titles``.
         """
+        resolved_no_title = _resolve_no_title(no_title, clear_titles)
         if not _is_design_unit_type(self._series.dtype):
             raise TypeError(
                 f"get_ligands() requires DesignUnitType, got {self._series.dtype}"
@@ -301,21 +511,29 @@ class SeriesChemNamespace:
                 return None
             mol = oechem.OEMol()
             if du.GetLigand(mol):
-                if clear_titles:
-                    mol.SetTitle("")
+                if resolved_no_title:
+                    _clear_mol_titles(mol)
                 return mol
             return None
 
         ligands = [extract_ligand(du) for du in self._series.to_list()]
         return pl.Series(self._series.name, ligands, dtype=MoleculeType())
 
-    def get_proteins(self, *, clear_titles: bool = False) -> pl.Series:
+    def get_proteins(
+        self,
+        *,
+        no_title: bool = False,
+        clear_titles: bool | None = None,
+    ) -> pl.Series:
         """Extract protein molecules from design units.
 
-        :param clear_titles: If True, clear the titles of extracted proteins.
+        :param no_title: If True, clear titles on extracted proteins.
+        :param clear_titles: Deprecated alias for ``no_title``.
         :returns: MoleculeType Series containing protein molecules.
         :raises TypeError: If the Series is not a DesignUnitType.
+        :raises ValueError: If ``no_title`` conflicts with ``clear_titles``.
         """
+        resolved_no_title = _resolve_no_title(no_title, clear_titles)
         if not _is_design_unit_type(self._series.dtype):
             raise TypeError(
                 f"get_proteins() requires DesignUnitType, got {self._series.dtype}"
@@ -326,8 +544,8 @@ class SeriesChemNamespace:
                 return None
             mol = oechem.OEMol()
             if du.GetProtein(mol):
-                if clear_titles:
-                    mol.SetTitle("")
+                if resolved_no_title:
+                    _clear_mol_titles(mol)
                 return mol
             return None
 
@@ -535,7 +753,7 @@ class SeriesChemNamespace:
 
         for fp in self._series.to_list():
             if fp is not None and fp.IsValid():
-                return fp.GetSize()
+                return cast(int, fp.GetSize())
         return None
 
     def to_hex_strings(self) -> pl.Series:
@@ -605,7 +823,7 @@ class SeriesChemNamespace:
             else:
                 if fp_info is None:
                     fp_info = get_openeye_fp_info(fp)
-                result.append(to_numpy_fp(fp, fp_info))
+                result.append(cast(np.ndarray, to_numpy_fp(fp, fp_info)))
 
         return np.vstack(result) if result else np.array([], dtype=bool).reshape(
             0, n_bits
@@ -659,10 +877,13 @@ class SeriesChemNamespace:
                 )
             other_list = other.to_list()
             similarities = []
-            for fp1, fp2 in zip(fps_list, other_list):
-                if fp1 is None or fp2 is None:
-                    similarities.append(np.nan)
-                elif not fp1.IsValid() or not fp2.IsValid():
+            for fp1, fp2 in zip(fps_list, other_list, strict=False):
+                if (
+                    fp1 is None
+                    or fp2 is None
+                    or not fp1.IsValid()
+                    or not fp2.IsValid()
+                ):
                     similarities.append(np.nan)
                 else:
                     similarities.append(oegraphsim.OETanimoto(fp1, fp2))
@@ -721,10 +942,13 @@ class SeriesChemNamespace:
                 )
             other_list = other.to_list()
             distances = []
-            for fp1, fp2 in zip(fps_list, other_list):
-                if fp1 is None or fp2 is None:
-                    distances.append(np.nan)
-                elif not fp1.IsValid() or not fp2.IsValid():
+            for fp1, fp2 in zip(fps_list, other_list, strict=False):
+                if (
+                    fp1 is None
+                    or fp2 is None
+                    or not fp1.IsValid()
+                    or not fp2.IsValid()
+                ):
                     distances.append(np.nan)
                 else:
                     distances.append(OEJaccard(fp1, fp2))
