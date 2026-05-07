@@ -7,7 +7,6 @@ import pytest
 
 import oepolars as oep
 
-
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 
 

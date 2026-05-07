@@ -180,7 +180,7 @@ smiles_series = df["Molecule"].chem.to_smiles()
 copies = df["Molecule"].chem.copy_molecules()
 
 # Substructure searching with SMARTS
-has_carboxylic_acid = df["Molecule"].chem.subsearch("C(=O)O")
+has_carboxylic_acid = df["Molecule"].chem.substructure_search("C(=O)O")
 df_acids = df.filter(has_carboxylic_acid)
 ```
 
@@ -644,7 +644,7 @@ Access these methods via `lf.chem.<method>()`. Most operations require `.collect
 | `has_molecule_columns()` | `bool` | Check if LazyFrame has molecule columns |
 | `molecule_columns()` | `list[str]` | Get names of molecule columns |
 
-**Note:** Operations like `to_smiles()`, `subsearch()`, `filter_valid()`, and `as_molecule()` raise `LazyOperationError` on LazyFrames. Use `.collect()` first or apply these on eager DataFrames.
+**Note:** Operations like `to_smiles()`, `substructure_search()`, `filter_valid()`, and `as_molecule()` raise `LazyOperationError` on LazyFrames. Use `.collect()` first or apply these on eager DataFrames.
 
 ---
 
@@ -659,7 +659,7 @@ Access these methods via `series.chem.<method>()`:
 | `copy_molecules()` | `Series[MoleculeType]` | Deep copy all molecules |
 | `is_valid()` | `Series[bool]` | Boolean mask of valid (non-null) molecules |
 | `to_smiles(flavor=OESMILESFlag_ISOMERIC)` | `Series[str]` | Convert to SMILES strings |
-| `subsearch(pattern, adjustH=False)` | `Series[bool]` | Substructure search with SMARTS pattern |
+| `substructure_search(pattern, adjustH=False)` | `Series[bool]` | Substructure search with SMARTS pattern |
 
 #### Design Unit Methods
 
@@ -727,7 +727,7 @@ df_druglike = df.filter(
 )
 
 # 5. Substructure search for carboxylic acids
-has_acid = df_druglike["Molecule"].chem.subsearch("C(=O)O")
+has_acid = df_druglike["Molecule"].chem.substructure_search("C(=O)O")
 df_acids = df_druglike.filter(has_acid)
 
 # 6. Export results

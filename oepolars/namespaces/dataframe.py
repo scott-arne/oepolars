@@ -13,14 +13,22 @@ from oepolars.util import mol_to_bytes
 log = logging.getLogger("oepolars")
 
 
+def _extension_name(dtype: pl.DataType) -> str | None:
+    """Return a Polars extension dtype name when present."""
+    ext_name = getattr(dtype, "ext_name", None)
+    if callable(ext_name):
+        return str(ext_name())
+    return None
+
+
 def _is_molecule_type(dtype: pl.DataType) -> bool:
     """Check if dtype is MoleculeType."""
-    return hasattr(dtype, "ext_name") and dtype.ext_name() == "molecule"
+    return _extension_name(dtype) == "molecule"
 
 
 def _is_design_unit_type(dtype: pl.DataType) -> bool:
     """Check if dtype is DesignUnitType."""
-    return hasattr(dtype, "ext_name") and dtype.ext_name() == "design_unit"
+    return _extension_name(dtype) == "design_unit"
 
 
 def _parse_smiles_to_mol(smiles: str | None) -> oechem.OEMol | None:
@@ -215,6 +223,64 @@ class DataFrameChemNamespace:
 
         return self._df.filter(filter_expr)
 
+    def substructure_search(
+        self,
+        column: str,
+        pattern: str | oechem.OESubSearch,
+        *,
+        adjustH: bool = False,
+    ) -> pl.DataFrame:
+        """Filter rows to those where molecules match a substructure pattern.
+
+        :param column: Name of the molecule column to search.
+        :param pattern: SMARTS pattern string or OESubSearch object.
+        :param adjustH: If True, adjust implicit/explicit hydrogens to match query.
+        :returns: DataFrame with rows that match the substructure.
+        :raises KeyError: If the column does not exist.
+        :raises TypeError: If the column is not a MoleculeType.
+
+        Example::
+
+            df.chem.substructure_search("Molecule", "c1ccccc1")
+        """
+        if column not in self._df.columns:
+            raise KeyError(f"Column '{column}' not found in DataFrame")
+
+        mask = self._df[column].chem.substructure_search(  # pyright: ignore[reportAttributeAccessIssue]
+            pattern,
+            adjustH=adjustH,
+        )
+        return self._df.filter(mask)
+
+    def substructure_filter(
+        self,
+        column: str,
+        pattern: str | oechem.OESubSearch,
+        *,
+        adjustH: bool = False,
+    ) -> pl.DataFrame:
+        """Filter out rows where molecules match a substructure pattern.
+
+        :param column: Name of the molecule column to search.
+        :param pattern: SMARTS pattern string or OESubSearch object.
+        :param adjustH: If True, adjust implicit/explicit hydrogens to match query.
+        :returns: DataFrame with rows that do not match the substructure.
+        :raises KeyError: If the column does not exist.
+        :raises TypeError: If the column is not a MoleculeType.
+
+        Example::
+
+            df.chem.substructure_filter("Molecule", "c1ccccc1")
+        """
+        if column not in self._df.columns:
+            raise KeyError(f"Column '{column}' not found in DataFrame")
+
+        mask = self._df[column].chem.substructure_search(  # pyright: ignore[reportAttributeAccessIssue]
+            pattern,
+            adjustH=adjustH,
+        )
+        return self._df.filter(~mask)
+
     def detect_molecule_columns(self, *, sample_size: int = 25) -> pl.DataFrame:
         """Auto-detect and convert molecule columns.
 
@@ -266,7 +332,9 @@ class DataFrameChemNamespace:
 
         # Convert detected columns
         if columns_to_convert:
-            result = result.chem.as_molecule(columns_to_convert)
+            result = result.chem.as_molecule(  # pyright: ignore[reportAttributeAccessIssue]
+                columns_to_convert
+            )
 
         return result
 
@@ -593,7 +661,7 @@ class DataFrameChemNamespace:
         # Set format explicitly to OEB for OEDB files (same binary format)
         ofs.SetFormat(oechem.OEFormat_OEB)
         if not ofs.open(str(Path(filepath))):
-            raise IOError(f"Failed to open file for writing: {filepath}")
+            raise OSError(f"Failed to open file for writing: {filepath}")
 
         try:
             sd_cols_list = list(sd_columns) if sd_columns else []

@@ -17,31 +17,38 @@ from oepolars.fingerprint import (
 )
 from oepolars.types import DesignUnitType, DisplayType, FingerprintType, MoleculeType
 
-
 # Dictionary to store metadata for Series objects, keyed by object id.
 # Note: This is keyed by id() which means metadata persists as long as
 # the Series object exists (no automatic cleanup when Series is garbage collected).
 _series_metadata: dict[int, dict[str, Any]] = {}
 
 
+def _extension_name(dtype: pl.DataType) -> str | None:
+    """Return a Polars extension dtype name when present."""
+    ext_name = getattr(dtype, "ext_name", None)
+    if callable(ext_name):
+        return str(ext_name())
+    return None
+
+
 def _is_molecule_type(dtype: pl.DataType) -> bool:
     """Check if dtype is MoleculeType."""
-    return hasattr(dtype, "ext_name") and dtype.ext_name() == "molecule"
+    return _extension_name(dtype) == "molecule"
 
 
 def _is_design_unit_type(dtype: pl.DataType) -> bool:
     """Check if dtype is DesignUnitType."""
-    return hasattr(dtype, "ext_name") and dtype.ext_name() == "design_unit"
+    return _extension_name(dtype) == "design_unit"
 
 
 def _is_display_type(dtype: pl.DataType) -> bool:
     """Check if dtype is DisplayType."""
-    return hasattr(dtype, "ext_name") and dtype.ext_name() == "display"
+    return _extension_name(dtype) == "display"
 
 
 def _is_fingerprint_type(dtype: pl.DataType) -> bool:
     """Check if dtype is FingerprintType."""
-    return hasattr(dtype, "ext_name") and dtype.ext_name() == "fingerprint"
+    return _extension_name(dtype) == "fingerprint"
 
 
 @pl.api.register_series_namespace("chem")
@@ -197,7 +204,7 @@ class SeriesChemNamespace:
             return_dtype=pl.String,
         )
 
-    def subsearch(
+    def substructure_search(
         self,
         pattern: str | oechem.OESubSearch,
         *,
@@ -214,13 +221,13 @@ class SeriesChemNamespace:
         Example::
 
             # Find molecules with benzene ring
-            has_benzene = s.chem.subsearch("c1ccccc1")
+            has_benzene = s.chem.substructure_search("c1ccccc1")
             # Series: 'mol' [bool]
             # [false, true, false, true]
         """
         if not _is_molecule_type(self._series.dtype):
             raise TypeError(
-                f"subsearch() requires MoleculeType, got {self._series.dtype}"
+                f"substructure_search() requires MoleculeType, got {self._series.dtype}"
             )
 
         # Create OESubSearch object if string pattern provided
@@ -240,6 +247,27 @@ class SeriesChemNamespace:
             match_mol,
             return_dtype=pl.Boolean,
         ).fill_null(False)
+
+    def substructure_filter(
+        self,
+        pattern: str | oechem.OESubSearch,
+        *,
+        adjustH: bool = False,
+    ) -> pl.Series:
+        """Return inverse of :meth:`substructure_search`.
+
+        :param pattern: SMARTS pattern string or OESubSearch object.
+        :param adjustH: If True, adjust implicit/explicit hydrogens to match query.
+        :returns: Boolean Series where True indicates the molecule does NOT match.
+        :raises TypeError: If the Series is not a MoleculeType.
+        :raises InvalidSMARTS: If the pattern is an invalid SMARTS string.
+
+        Example::
+
+            # Find molecules without a benzene ring
+            no_benzene = s.chem.substructure_filter("c1ccccc1")
+        """
+        return ~self.substructure_search(pattern, adjustH=adjustH)
 
     def copy_molecules(self) -> pl.Series:
         """Create deep copies of all molecules in the Series.
@@ -659,10 +687,8 @@ class SeriesChemNamespace:
                 )
             other_list = other.to_list()
             similarities = []
-            for fp1, fp2 in zip(fps_list, other_list):
-                if fp1 is None or fp2 is None:
-                    similarities.append(np.nan)
-                elif not fp1.IsValid() or not fp2.IsValid():
+            for fp1, fp2 in zip(fps_list, other_list, strict=True):
+                if fp1 is None or fp2 is None or not fp1.IsValid() or not fp2.IsValid():
                     similarities.append(np.nan)
                 else:
                     similarities.append(oegraphsim.OETanimoto(fp1, fp2))
@@ -721,10 +747,8 @@ class SeriesChemNamespace:
                 )
             other_list = other.to_list()
             distances = []
-            for fp1, fp2 in zip(fps_list, other_list):
-                if fp1 is None or fp2 is None:
-                    distances.append(np.nan)
-                elif not fp1.IsValid() or not fp2.IsValid():
+            for fp1, fp2 in zip(fps_list, other_list, strict=True):
+                if fp1 is None or fp2 is None or not fp1.IsValid() or not fp2.IsValid():
                     distances.append(np.nan)
                 else:
                     distances.append(OEJaccard(fp1, fp2))

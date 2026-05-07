@@ -1,14 +1,11 @@
 """Tests for pandas interoperability."""
 
+import oepandas as oepd
 import pandas as pd
 import polars as pl
-import pytest
 from openeye import oechem
 
-import oepandas as oepd
 import oepolars as oepl
-from oepolars.types import MoleculeType
-
 
 FIXTURES_DIR = "tests/fixtures"
 
@@ -83,7 +80,7 @@ class TestFromPandas:
         pl_smiles = result["Molecule"].chem.to_smiles().to_list()
 
         # Compare
-        for i, (ps, pls) in enumerate(zip(pd_smiles, pl_smiles)):
+        for i, (ps, pls) in enumerate(zip(pd_smiles, pl_smiles, strict=True)):
             assert ps == pls, f"SMILES mismatch at index {i}: {ps} != {pls}"
 
     def test_from_pandas_with_multiple_molecule_columns(self):

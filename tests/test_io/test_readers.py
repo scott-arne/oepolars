@@ -157,8 +157,8 @@ class TestReadSMI:
         assert len(df) == 3
 
     def test_read_smi_empty_file(self):
-        import tempfile
         import os
+        import tempfile
         with tempfile.NamedTemporaryFile(suffix=".smi", delete=False) as f:
             pass
         df = oep.read_smi(f.name)
@@ -351,6 +351,7 @@ class TestReadParquet:
     def molecule_dataframe(self):
         """Create a DataFrame with molecule columns for testing."""
         from openeye import oechem
+
         from oepolars import MoleculeType
 
         mols = []
@@ -397,6 +398,7 @@ class TestReadParquet:
     def test_read_parquet_handles_nulls(self, tmp_path):
         """Test that null bytes become null molecules."""
         from openeye import oechem
+
         from oepolars import MoleculeType
 
         mol = oechem.OEMol()
@@ -419,6 +421,7 @@ class TestReadParquet:
     def test_read_parquet_with_multiple_molecule_columns(self, tmp_path):
         """Test that multiple molecule columns work correctly."""
         from openeye import oechem
+
         from oepolars import MoleculeType
 
         mol1 = oechem.OEMol()

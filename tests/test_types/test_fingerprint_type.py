@@ -203,7 +203,7 @@ class TestFingerprintOperations:
         assert len(copied) == len(s)
         assert copied.dtype.ext_name() == "fingerprint"
         # Verify they are different objects
-        for orig, cp in zip(s.to_list(), copied.to_list()):
+        for orig, cp in zip(s.to_list(), copied.to_list(), strict=True):
             assert orig is not cp
 
 

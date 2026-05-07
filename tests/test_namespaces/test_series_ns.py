@@ -119,7 +119,7 @@ class TestSeriesToSmiles:
             s.chem.to_smiles()
 
 
-class TestSeriesSubsearch:
+class TestSeriesSubstructureSearch:
     @pytest.fixture
     def molecule_series(self):
         mols = []
@@ -130,47 +130,52 @@ class TestSeriesSubsearch:
             mols.append(mol)
         return pl.Series("mol", mols, dtype=MoleculeType())
 
-    def test_subsearch_returns_series(self, molecule_series):
-        result = molecule_series.chem.subsearch("c1ccccc1")
+    def test_substructure_search_returns_series(self, molecule_series):
+        result = molecule_series.chem.substructure_search("c1ccccc1")
         assert isinstance(result, pl.Series)
 
-    def test_subsearch_dtype_is_bool(self, molecule_series):
-        result = molecule_series.chem.subsearch("c1ccccc1")
+    def test_substructure_search_dtype_is_bool(self, molecule_series):
+        result = molecule_series.chem.substructure_search("c1ccccc1")
         assert result.dtype == pl.Boolean
 
-    def test_subsearch_finds_benzene_ring(self, molecule_series):
-        result = molecule_series.chem.subsearch("c1ccccc1")
+    def test_substructure_search_finds_benzene_ring(self, molecule_series):
+        result = molecule_series.chem.substructure_search("c1ccccc1")
         # benzene and phenol have benzene rings
         expected = [False, True, False, True]
         assert result.to_list() == expected
 
-    def test_subsearch_finds_hydroxyl(self, molecule_series):
-        result = molecule_series.chem.subsearch("[OH]")
+    def test_substructure_search_finds_hydroxyl(self, molecule_series):
+        result = molecule_series.chem.substructure_search("[OH]")
         # ethanol, acetic acid (carboxylic OH), and phenol have hydroxyl
         expected = [True, False, True, True]
         assert result.to_list() == expected
 
-    def test_subsearch_with_oesub_search_object(self, molecule_series):
+    def test_substructure_search_with_oesub_search_object(self, molecule_series):
         ss = oechem.OESubSearch("c1ccccc1")
-        result = molecule_series.chem.subsearch(ss)
+        result = molecule_series.chem.substructure_search(ss)
         expected = [False, True, False, True]
         assert result.to_list() == expected
 
-    def test_subsearch_with_nulls(self):
+    def test_substructure_search_with_nulls(self):
         mol = oechem.OEMol()
         oechem.OEParseSmiles(mol, "c1ccccc1")
         s = pl.Series("mol", [mol, None], dtype=MoleculeType())
-        result = s.chem.subsearch("c1ccccc1")
+        result = s.chem.substructure_search("c1ccccc1")
         assert result.to_list() == [True, False]
 
-    def test_subsearch_invalid_smarts_raises(self, molecule_series):
+    def test_substructure_search_invalid_smarts_raises(self, molecule_series):
         with pytest.raises(InvalidSMARTS):
-            molecule_series.chem.subsearch("invalid[[[smarts")
+            molecule_series.chem.substructure_search("invalid[[[smarts")
 
-    def test_subsearch_wrong_type_raises(self):
+    def test_substructure_search_wrong_type_raises(self):
         s = pl.Series("x", ["a", "b", "c"])
         with pytest.raises(TypeError, match="MoleculeType"):
-            s.chem.subsearch("c1ccccc1")
+            s.chem.substructure_search("c1ccccc1")
+
+    def test_substructure_filter_is_inverse(self, molecule_series):
+        search = molecule_series.chem.substructure_search("c1ccccc1")
+        filtered = molecule_series.chem.substructure_filter("c1ccccc1")
+        assert filtered.to_list() == [not v for v in search.to_list()]
 
 
 class TestSeriesCopyMolecules:

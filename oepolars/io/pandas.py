@@ -50,8 +50,6 @@ def from_pandas(df: pd.DataFrame) -> pl.DataFrame:
         elif dtype_name == "display":
             display_cols.add(col)
 
-    openeye_cols = molecule_cols | design_unit_cols | display_cols
-
     # Build Polars DataFrame column by column
     polars_series: list[pl.Series] = []
 

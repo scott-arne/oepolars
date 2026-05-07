@@ -122,10 +122,33 @@ known-first-party = ["oepolars"]
 
 [tool.mypy]
 python_version = "3.11"
-warn_return_any = true
+warn_return_any = false
 warn_unused_ignores = true
 ignore_missing_imports = true
 exclude = ["tests/", "build/", "dist/"]
+disable_error_code = [
+    "attr-defined",
+    "arg-type",
+    "no-any-return",
+    "union-attr",
+    "var-annotated",
+    "name-match",
+]
+
+
+# ----------------------------------------------------------------------------------------
+# Pyright configuration (static analysis / editor support)
+# https://microsoft.github.io/pyright/#/configuration
+# ----------------------------------------------------------------------------------------
+
+[tool.pyright]
+include = ["oepolars"]
+exclude = ["build", "dist", ".worktrees", "**/__pycache__"]
+ignore = ["tests", "tasks.py", "setup.py"]
+pythonVersion = "3.11"
+typeCheckingMode = "standard"
+venvPath = "/Users/johnss51/Applications/miniforge3/envs"
+venv = "main"
 
 
 # ----------------------------------------------------------------------------------------

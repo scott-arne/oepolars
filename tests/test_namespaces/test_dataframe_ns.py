@@ -134,6 +134,44 @@ class TestDataFrameDetectMoleculeColumns:
         assert result.schema["y"] == pl.String
 
 
+class TestDataFrameSubstructureSearch:
+    @pytest.fixture
+    def molecule_dataframe(self):
+        smiles_list = ["CCO", "c1ccccc1", "CC(=O)O", "c1ccc(O)cc1"]
+        mols = []
+        for smi in smiles_list:
+            mol = oechem.OEMol()
+            oechem.OEParseSmiles(mol, smi)
+            mols.append(mol)
+        return pl.DataFrame({
+            "Molecule": pl.Series(mols, dtype=MoleculeType()),
+            "name": ["ethanol", "benzene", "acetic acid", "phenol"],
+        })
+
+    def test_substructure_search_filters_matching_rows(self, molecule_dataframe):
+        result = molecule_dataframe.chem.substructure_search("Molecule", "c1ccccc1")
+        assert result.height == 2
+        assert result["name"].to_list() == ["benzene", "phenol"]
+
+    def test_substructure_filter_filters_non_matching_rows(self, molecule_dataframe):
+        result = molecule_dataframe.chem.substructure_filter("Molecule", "c1ccccc1")
+        assert result.height == 2
+        assert result["name"].to_list() == ["ethanol", "acetic acid"]
+
+    def test_substructure_search_and_filter_partition_rows(self, molecule_dataframe):
+        matches = molecule_dataframe.chem.substructure_search("Molecule", "c1ccccc1")
+        missed = molecule_dataframe.chem.substructure_filter("Molecule", "c1ccccc1")
+        assert matches.height + missed.height == molecule_dataframe.height
+
+    def test_substructure_search_column_not_found_raises(self, molecule_dataframe):
+        with pytest.raises(KeyError):
+            molecule_dataframe.chem.substructure_search("nonexistent", "c1ccccc1")
+
+    def test_substructure_filter_column_not_found_raises(self, molecule_dataframe):
+        with pytest.raises(KeyError):
+            molecule_dataframe.chem.substructure_filter("nonexistent", "c1ccccc1")
+
+
 class TestDataFrameWriteSDF:
     @pytest.fixture
     def molecule_dataframe(self):

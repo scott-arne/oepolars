@@ -2,7 +2,7 @@
 
 import logging
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 # Configure logging
 log = logging.getLogger("oepolars")
@@ -44,7 +44,23 @@ from oepolars.exceptions import (  # noqa: E402
     OEPolarsError,
     UnsupportedFileFormat,
 )
-from oepolars.io import from_pandas, read_molecule_csv, read_oeb, read_oedb, read_oedu, read_parquet, read_sdf, read_smi, scan_molecule_csv, scan_oeb, scan_oedb, scan_oedu, scan_parquet, scan_sdf, scan_smi  # noqa: E402
+from oepolars.io import (  # noqa: E402
+    from_pandas,
+    read_molecule_csv,
+    read_oeb,
+    read_oedb,
+    read_oedu,
+    read_parquet,
+    read_sdf,
+    read_smi,
+    scan_molecule_csv,
+    scan_oeb,
+    scan_oedb,
+    scan_oedu,
+    scan_parquet,
+    scan_sdf,
+    scan_smi,
+)
 from oepolars.types import DesignUnitType, DisplayType, FingerprintType, MoleculeType  # noqa: E402
 
 __all__ = [

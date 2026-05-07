@@ -15,7 +15,6 @@ import scipy.special
 from openeye import oechem, oegraphsim
 from tqdm.auto import tqdm
 
-
 # =============================================================================
 # Fingerprint conversion
 # =============================================================================
@@ -163,9 +162,7 @@ def get_atom_mask(atom_type: str) -> int:
     """
     atom_mask = oegraphsim.OEFPAtomType_None
     for m in atom_type.split("|"):
-        mask = atom_fp_typemap.get(
-            m.strip().lower().replace("oefpatomtype_", ""), None
-        )
+        mask = atom_fp_typemap.get(m.strip().lower().replace("oefpatomtype_", ""))
         if mask is None:
             raise KeyError(f"{m} is not a known OEAtomFPType")
         atom_mask |= mask
@@ -189,9 +186,7 @@ def get_bond_mask(bond_type: str) -> int:
     """
     bond_mask = oegraphsim.OEFPBondType_None
     for m in bond_type.split("|"):
-        mask = bond_fp_typemap.get(
-            m.strip().lower().replace("oefpbondtype_", ""), None
-        )
+        mask = bond_fp_typemap.get(m.strip().lower().replace("oefpbondtype_", ""))
         if mask is None:
             raise KeyError(f"{m} is not a known OEBondFPType")
         bond_mask |= mask
@@ -421,7 +416,7 @@ def get_openeye_comparison_metric(
     :returns: Tuple of (comparison function, is_similarity_metric).
     :raises KeyError: If the comparison function is unknown.
     """
-    cf = openeye_comparison_metric.get(name.lower(), None)
+    cf = openeye_comparison_metric.get(name.lower())
     if cf is None:
         raise KeyError(f"Unknown comparison function: {name}")
     return cf

@@ -1,0 +1,3 @@
+[[locations]]
+file = "oepolars/__init__.py"
+type = "python-dunder"

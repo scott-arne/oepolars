@@ -161,7 +161,7 @@ def read_sdf(
 
             molecules.append(oechem.OEMol(mol))
 
-            if not no_title:
+            if titles is not None:
                 titles.append(mol.GetTitle())
 
             if sd_data:
@@ -218,7 +218,7 @@ def read_oeb(
 
             molecules.append(oechem.OEMol(mol))
 
-            if not no_title:
+            if titles is not None:
                 titles.append(mol.GetTitle())
 
             if sd_data:
@@ -324,7 +324,7 @@ def read_smi(
 
             molecules.append(oechem.OEMol(mol))
 
-            if not no_title:
+            if titles is not None:
                 titles.append(mol.GetTitle())
 
     log.debug(f"Read {len(molecules)} molecules from {filepath}")
@@ -383,7 +383,7 @@ def read_oedb(
 
             molecules.append(oechem.OEMol(mol))
 
-            if not no_title:
+            if titles is not None:
                 titles.append(mol.GetTitle())
 
             if sd_data:
@@ -432,7 +432,7 @@ def read_oedu(
 
             design_units.append(oechem.OEDesignUnit(du))
 
-            if not no_title:
+            if titles is not None:
                 titles.append(du.GetTitle())
     finally:
         ifs.close()
