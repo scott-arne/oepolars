@@ -2,7 +2,7 @@
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![OpenEye Toolkits](https://img.shields.io/badge/OpenEye-2023.1.0+-green.svg)](https://www.eyesopen.com/toolkits)
-[![Polars 1.37+](https://img.shields.io/badge/polars-1.37+-orange.svg)](https://pola.rs/)
+[![Polars 1.44.1+](https://img.shields.io/badge/polars-1.44.1+-orange.svg)](https://pola.rs/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Deep integration of OpenEye objects into Polars DataFrames with native support for molecules and design units.
@@ -43,7 +43,7 @@ OEPolars extends Polars with custom extension types that store OpenEye `OEMol` a
 | Package | Version |
 |---------|---------|
 | Python | 3.11+ |
-| polars | 1.37.1+ |
+| polars | 1.44.1+ |
 | OpenEye Toolkits | 2023.1.0+ |
 
 ### OpenEye Toolkits License

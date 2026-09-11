@@ -125,7 +125,7 @@ class SeriesChemNamespace:
                 return oechem.OEMol(mol)
 
             copied = [copy_mol(mol) for mol in self._series.to_list()]
-            new_series = pl.Series(self._series.name, copied, dtype=MoleculeType())
+            new_series = pl.Series(self._series.name, copied, dtype=MoleculeType(dtype.token))
 
         elif is_display:
 
@@ -137,7 +137,7 @@ class SeriesChemNamespace:
                 return oedepict.OE2DMolDisplay(disp)
 
             copied = [copy_disp(disp) for disp in self._series.to_list()]
-            new_series = pl.Series(self._series.name, copied, dtype=DisplayType())
+            new_series = pl.Series(self._series.name, copied, dtype=DisplayType(dtype.token))
 
         else:  # is_fingerprint
 
@@ -296,7 +296,8 @@ class SeriesChemNamespace:
             return oechem.OEMol(mol)
 
         copied = [copy_mol(mol) for mol in self._series.to_list()]
-        return pl.Series(self._series.name, copied, dtype=MoleculeType())
+        dtype = self._series.dtype
+        return pl.Series(self._series.name, copied, dtype=MoleculeType(dtype.token))
 
     def copy_design_units(self) -> pl.Series:
         """Create deep copies of all design units in the Series.
@@ -315,7 +316,8 @@ class SeriesChemNamespace:
             return oechem.OEDesignUnit(du)
 
         copied = [copy_du(du) for du in self._series.to_list()]
-        return pl.Series(self._series.name, copied, dtype=DesignUnitType())
+        dtype = self._series.dtype
+        return pl.Series(self._series.name, copied, dtype=DesignUnitType(dtype.token))
 
     def get_ligands(self, *, clear_titles: bool = False) -> pl.Series:
         """Extract ligand molecules from design units.
