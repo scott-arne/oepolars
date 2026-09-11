@@ -81,6 +81,11 @@ class SeriesChemNamespace:
             _series_metadata[series_id] = {}
         return _series_metadata[series_id]
 
+    @property
+    def token(self) -> str | None:
+        """The per-column token from the dtype metadata, or ``None``."""
+        return getattr(self._series.dtype, "token", None)
+
     def deepcopy(self) -> pl.Series:
         """Create a deep copy of the Series with independent object copies.
 

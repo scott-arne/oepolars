@@ -85,6 +85,25 @@ class DataFrameChemNamespace:
     def __init__(self, df: pl.DataFrame) -> None:
         self._df = df
 
+    def with_token(self, column: str, token: str | None) -> pl.DataFrame:
+        """Return a frame whose *column* carries *token* in its dtype metadata.
+
+        Extension columns cannot be cast, so the column is rebuilt from its values;
+        the Python objects are shared, not copied.
+
+        :param column: Name of a MoleculeType, DisplayType or DesignUnitType column.
+        :param token: New token, or ``None`` to clear it.
+        :returns: The new frame.
+        :raises TypeError: If *column* is not an OpenEye extension column.
+        """
+        from oepolars.types import DisplayType
+
+        dtype = self._df.schema[column]
+        if not isinstance(dtype, (MoleculeType, DisplayType, DesignUnitType)):
+            raise TypeError(f"Column {column!r} has dtype {dtype}; with_token needs an OpenEye extension column")
+        series = pl.Series(column, self._df.get_column(column).to_list(), dtype=type(dtype)(token))
+        return self._df.with_columns(series)
+
     def as_molecule(
         self,
         columns: str | Iterable[str],

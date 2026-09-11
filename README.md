@@ -514,6 +514,23 @@ Auto-detect and convert molecule columns based on content.
 df.chem.detect_molecule_columns(*, sample_size=25)
 ```
 
+#### `with_token()`
+
+Set or clear the token in an extension column's dtype metadata.
+
+```python
+df.chem.with_token(column, token)
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `column` | str | required | Name of a MoleculeType, DisplayType, or DesignUnitType column |
+| `token` | str, None | required | Token to set, or `None` to clear |
+
+The token is stored in the dtype metadata and survives polars frame operations. Extension columns cannot be cast, so the column is rebuilt from its values with the new token; the Python objects are shared, not copied.
+
+**Note:** Frames with extension columns carrying different tokens cannot be concatenated with `pl.concat()` (polars raises `SchemaError` because the dtypes differ).
+
 #### `write_sdf()`
 
 Write DataFrame to SDF file.
@@ -652,6 +669,12 @@ Access these methods via `lf.chem.<method>()`. Most operations require `.collect
 
 Access these methods via `series.chem.<method>()`:
 
+#### Properties
+
+| Property | Returns | Description |
+|----------|---------|-------------|
+| `token` | `str, None` | The per-column token from the dtype metadata, or `None` |
+
 #### Molecule Methods
 
 | Method | Returns | Description |
@@ -681,6 +704,55 @@ OEPolars provides three custom Polars extension types:
 | `MoleculeType` | `"molecule"` | `oechem.OEMol` | Stores molecular structures |
 | `DesignUnitType` | `"design_unit"` | `oechem.OEDesignUnit` | Stores protein-ligand complexes |
 | `DisplayType` | `"display"` | `oedepict.OE2DMolDisplay` | Stores 2D molecular depictions |
+
+Each extension type now accepts an optional `token` parameter that stores per-column metadata:
+
+```python
+import oepolars as oepl
+
+# Create a column with a token
+dtype = oepl.MoleculeType(token="my_molecules")
+s = pl.Series("mol", molecules, dtype=dtype)
+
+# Read the token
+s.chem.token  # Returns "my_molecules"
+```
+
+---
+
+### Extension Hooks
+
+The `oepolars.extensions` module provides hooks for packages that extend the `chem` namespaces:
+
+#### `register_series_method()`
+
+```python
+from oepolars import extensions
+
+def custom_method(self):
+    # self._series is the Polars Series
+    return self._series.name
+
+extensions.register_series_method("my_method", custom_method)
+
+# Now callable as:
+s.chem.my_method()
+```
+
+#### `register_dataframe_method()`
+
+```python
+def custom_df_method(self):
+    # self._df is the Polars DataFrame
+    return self._df.width
+
+extensions.register_dataframe_method("my_method", custom_df_method)
+
+# Now callable as:
+df.chem.my_method()
+```
+
+Both functions accept an `overwrite=True` parameter to replace existing methods.
 
 ---
 
