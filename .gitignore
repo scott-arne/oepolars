@@ -69,6 +69,7 @@ target/
 .worktrees/
 docs/plans
 docs/superpowers
+docs/hyperpowers
 docs/specs
 .superpowers
 .claude
