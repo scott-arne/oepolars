@@ -241,7 +241,7 @@ class SeriesChemNamespace:
                 return _copy_molecule(mol)
 
             copied = [copy_mol(mol) for mol in self._series.to_list()]
-            new_series = pl.Series(self._series.name, copied, dtype=MoleculeType(dtype.token))
+            new_series = pl.Series(self._series.name, copied, dtype=MoleculeType(dtype.token))  # pyright: ignore[reportAttributeAccessIssue]
 
         elif is_display:
 
@@ -253,7 +253,7 @@ class SeriesChemNamespace:
                 return oedepict.OE2DMolDisplay(disp)
 
             copied = [copy_disp(disp) for disp in self._series.to_list()]
-            new_series = pl.Series(self._series.name, copied, dtype=DisplayType(dtype.token))
+            new_series = pl.Series(self._series.name, copied, dtype=DisplayType(dtype.token))  # pyright: ignore[reportAttributeAccessIssue]
 
         else:  # is_fingerprint
 
@@ -305,7 +305,7 @@ class SeriesChemNamespace:
             for value in self._series.to_list()
         ]
         dtype = self._series.dtype
-        token = dtype.token if _is_molecule_type(dtype) else None
+        token = dtype.token if _is_molecule_type(dtype) else None  # pyright: ignore[reportAttributeAccessIssue]
         return pl.Series(self._series.name, molecules, dtype=MoleculeType(token))
 
     def as_query(
@@ -484,7 +484,7 @@ class SeriesChemNamespace:
 
         copied = [copy_mol(mol) for mol in self._series.to_list()]
         dtype = self._series.dtype
-        return pl.Series(self._series.name, copied, dtype=MoleculeType(dtype.token))
+        return pl.Series(self._series.name, copied, dtype=MoleculeType(dtype.token))  # pyright: ignore[reportAttributeAccessIssue]
 
     def copy_design_units(self) -> pl.Series:
         """Create deep copies of all design units in the Series.
@@ -504,7 +504,7 @@ class SeriesChemNamespace:
 
         copied = [copy_du(du) for du in self._series.to_list()]
         dtype = self._series.dtype
-        return pl.Series(self._series.name, copied, dtype=DesignUnitType(dtype.token))
+        return pl.Series(self._series.name, copied, dtype=DesignUnitType(dtype.token))  # pyright: ignore[reportAttributeAccessIssue]
 
     def get_ligands(
         self,
