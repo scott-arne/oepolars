@@ -65,3 +65,15 @@ def test_as_molecule_recopy_preserves_token():
     converted = s.chem.as_molecule(no_title=True)
     assert converted.chem.token == "keep"
     assert converted[0] is not s[0]
+
+
+def test_as_query_recopy_preserves_token():
+    queries = []
+    for _ in range(2):
+        q = oechem.OEQMol()
+        oechem.OEParseSmarts(q, "c1ccccc1")
+        queries.append(q)
+    s = pl.Series("query", queries, dtype=oeplr.QueryType("keep"))
+    converted = s.chem.as_query(no_title=True)
+    assert converted.chem.token == "keep"
+    assert converted[0] is not s[0]

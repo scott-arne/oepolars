@@ -332,7 +332,9 @@ class SeriesChemNamespace:
             return query
 
         queries = [convert(value) for value in self._series.to_list()]
-        return pl.Series(self._series.name, queries, dtype=QueryType())
+        dtype = self._series.dtype
+        token = dtype.token if _is_query_type(dtype) else None  # pyright: ignore[reportAttributeAccessIssue]
+        return pl.Series(self._series.name, queries, dtype=QueryType(token))
 
     def is_valid(self) -> pl.Series:
         """Return a boolean Series indicating valid OpenEye objects.

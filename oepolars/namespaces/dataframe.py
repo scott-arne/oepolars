@@ -7,7 +7,7 @@ from pathlib import Path
 import polars as pl
 from openeye import oechem
 
-from oepolars.types import DesignUnitType, MoleculeType
+from oepolars.types import DesignUnitType, MoleculeType, QueryType
 from oepolars.types.molecule import MoleculeTypeInput
 from oepolars.types.query import QueryFormat, QueryFormatInput
 from oepolars.util import mol_to_bytes
@@ -98,7 +98,7 @@ class DataFrameChemNamespace:
         Extension columns cannot be cast, so the column is rebuilt from its values;
         the Python objects are shared, not copied.
 
-        :param column: Name of a MoleculeType, DisplayType or DesignUnitType column.
+        :param column: Name of a MoleculeType, QueryType, DisplayType or DesignUnitType column.
         :param token: New token, or ``None`` to clear it.
         :returns: The new frame.
         :raises TypeError: If *column* is not an OpenEye extension column.
@@ -106,7 +106,7 @@ class DataFrameChemNamespace:
         from oepolars.types import DisplayType
 
         dtype = self._df.schema[column]
-        if not isinstance(dtype, (MoleculeType, DisplayType, DesignUnitType)):
+        if not isinstance(dtype, (MoleculeType, QueryType, DisplayType, DesignUnitType)):
             raise TypeError(f"Column {column!r} has dtype {dtype}; with_token needs an OpenEye extension column")
         series = pl.Series(column, self._df.get_column(column).to_list(), dtype=type(dtype)(token))
         return self._df.with_columns(series)

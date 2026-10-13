@@ -9,8 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `QueryType` extension dtype for OpenEye query molecules, with a `QueryFormat` enum (`SMARTS`, `SMIRKS`) selecting how string values are parsed.
-- `series.chem.as_query()` and `df.chem.as_query()` to convert columns to `QueryType`. `lf.chem.as_query()` raises `LazyOperationError` like the other eager-only operations.
+- `QueryType` extension dtype for OpenEye query molecules, with a `QueryFormat` enum (`SMARTS`, `SMIRKS`) selecting how string values are parsed. Like the other extension dtypes, it accepts an optional `token`, and `df.chem.with_token()` works on query columns.
+- `series.chem.as_query()` and `df.chem.as_query()` to convert columns to `QueryType`. Re-copying an existing query column keeps its token. `lf.chem.as_query()` raises `LazyOperationError` like the other eager-only operations.
 - `MoleculeTypeKind` enum (`DEFAULT`, `OEMOL`, `OEGRAPHMOL`, `OEQMOL`) and a `molecule_type` parameter to choose the OpenEye molecule class produced by `series.chem.as_molecule()`, `df.chem.as_molecule()`, `read_sdf()`, `read_oeb()`, `read_smi()`, `read_oedb()`, `read_molecule_csv()`, and the matching `scan_*` functions.
 - `series.chem.as_molecule()` to convert a Series to `MoleculeType`. Re-copying an existing molecule column keeps its token.
 - `no_title` parameter on `read_molecule_csv()`, `get_ligands()`, and `get_proteins()`.

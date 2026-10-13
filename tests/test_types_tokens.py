@@ -65,3 +65,33 @@ def test_mixed_tokens_cannot_concat_but_cleared_frames_can():
     a = _frame("a", 1).chem.with_token("mol", None)
     b = _frame("b", 1).chem.with_token("mol", None)
     assert len(pl.concat([a, b])) == 2
+
+
+def _queries(n):
+    out = []
+    for _ in range(n):
+        q = oechem.OEQMol()
+        oechem.OEParseSmarts(q, "c1ccccc1")
+        out.append(q)
+    return out
+
+
+def test_query_token_property_and_default():
+    assert oeplr.QueryType().token is None
+    assert oeplr.QueryType("q").token == "q"
+
+
+def test_query_token_survives_frame_operations():
+    df = pl.DataFrame([
+        pl.Series("query", _queries(3), dtype=oeplr.QueryType("tok")),
+        pl.Series("x", list(range(3))),
+    ])
+    dtype = df.filter(pl.col("x") > 0).schema["query"]
+    assert isinstance(dtype, oeplr.QueryType) and dtype.token == "tok"
+
+
+def test_with_token_on_query_column():
+    df = pl.DataFrame([pl.Series("query", _queries(2), dtype=oeplr.QueryType())])
+    retagged = df.chem.with_token("query", "two")
+    assert retagged.get_column("query").chem.token == "two"
+    assert retagged.get_column("query")[0] is df.get_column("query")[0]
