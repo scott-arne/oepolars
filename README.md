@@ -2,7 +2,7 @@
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![OpenEye Toolkits](https://img.shields.io/badge/OpenEye-2023.1.0+-green.svg)](https://www.eyesopen.com/toolkits)
-[![Polars 1.37+](https://img.shields.io/badge/polars-1.37+-orange.svg)](https://pola.rs/)
+[![Polars 1.44.1+](https://img.shields.io/badge/polars-1.44.1+-orange.svg)](https://pola.rs/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Deep integration of OpenEye objects into Polars DataFrames with native support for molecules and design units.
@@ -44,7 +44,7 @@ OEPolars extends Polars with custom extension types that store OpenEye `OEMol` a
 | Package | Version |
 |---------|---------|
 | Python | 3.11+ |
-| polars | 1.37.1+ |
+| polars | 1.44.1+ |
 | OpenEye Toolkits | 2023.1.0+ |
 
 ### OpenEye Toolkits License
@@ -183,7 +183,7 @@ smiles_series = df["Molecule"].chem.to_smiles()
 copies = df["Molecule"].chem.copy_molecules()
 
 # Substructure searching with SMARTS
-has_carboxylic_acid = df["Molecule"].chem.subsearch("C(=O)O")
+has_carboxylic_acid = df["Molecule"].chem.substructure_search("C(=O)O")
 df_acids = df.filter(has_carboxylic_acid)
 
 # Convert string columns explicitly and choose the OpenEye molecule class
@@ -590,6 +590,23 @@ Auto-detect and convert molecule columns based on content.
 df.chem.detect_molecule_columns(*, sample_size=25)
 ```
 
+#### `with_token()`
+
+Set or clear the token in an extension column's dtype metadata.
+
+```python
+df.chem.with_token(column, token)
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `column` | str | required | Name of a MoleculeType, DisplayType, or DesignUnitType column |
+| `token` | str, None | required | Token to set, or `None` to clear |
+
+The token is stored in the dtype metadata and survives polars frame operations. Extension columns cannot be cast, so the column is rebuilt from its values with the new token; the Python objects are shared, not copied.
+
+**Note:** Frames with extension columns carrying different tokens cannot be concatenated with `pl.concat()` (polars raises `SchemaError` because the dtypes differ).
+
 #### `write_sdf()`
 
 Write DataFrame to SDF file.
@@ -720,13 +737,19 @@ Access these methods via `lf.chem.<method>()`. Most operations require `.collect
 | `has_molecule_columns()` | `bool` | Check if LazyFrame has molecule columns |
 | `molecule_columns()` | `list[str]` | Get names of molecule columns |
 
-**Note:** Operations like `to_smiles()`, `subsearch()`, `filter_valid()`, `as_molecule()`, and `as_query()` raise `LazyOperationError` on LazyFrames. Use `.collect()` first or apply these on eager DataFrames.
+**Note:** Operations like `to_smiles()`, `substructure_search()`, `filter_valid()`, `as_molecule()`, and `as_query()` raise `LazyOperationError` on LazyFrames. Use `.collect()` first or apply these on eager DataFrames.
 
 ---
 
 ### Series Accessor Methods (`series.chem.*`)
 
 Access these methods via `series.chem.<method>()`:
+
+#### Properties
+
+| Property | Returns | Description |
+|----------|---------|-------------|
+| `token` | `str, None` | The per-column token from the dtype metadata, or `None` |
 
 #### Molecule Methods
 
@@ -736,7 +759,7 @@ Access these methods via `series.chem.<method>()`:
 | `copy_molecules()` | `Series[MoleculeType]` | Deep copy all molecules |
 | `is_valid()` | `Series[bool]` | Boolean mask of valid (non-null) molecules |
 | `to_smiles(flavor=OESMILESFlag_ISOMERIC)` | `Series[str]` | Convert to SMILES strings |
-| `subsearch(pattern, adjustH=False)` | `Series[bool]` | Substructure search with SMARTS pattern |
+| `substructure_search(pattern, adjustH=False)` | `Series[bool]` | Substructure search with SMARTS pattern |
 
 #### Query Methods
 
@@ -767,6 +790,55 @@ OEPolars provides five custom Polars extension types:
 | `DesignUnitType` | `"design_unit"` | `oechem.OEDesignUnit` | Stores protein-ligand complexes |
 | `DisplayType` | `"display"` | `oedepict.OE2DMolDisplay` | Stores 2D molecular depictions |
 | `FingerprintType` | `"fingerprint"` | `oegraphsim.OEFingerPrint` | Stores molecular fingerprints |
+
+Each extension type now accepts an optional `token` parameter that stores per-column metadata:
+
+```python
+import oepolars as oepl
+
+# Create a column with a token
+dtype = oepl.MoleculeType(token="my_molecules")
+s = pl.Series("mol", molecules, dtype=dtype)
+
+# Read the token
+s.chem.token  # Returns "my_molecules"
+```
+
+---
+
+### Extension Hooks
+
+The `oepolars.extensions` module provides hooks for packages that extend the `chem` namespaces:
+
+#### `register_series_method()`
+
+```python
+from oepolars import extensions
+
+def custom_method(self):
+    # self._series is the Polars Series
+    return self._series.name
+
+extensions.register_series_method("my_method", custom_method)
+
+# Now callable as:
+s.chem.my_method()
+```
+
+#### `register_dataframe_method()`
+
+```python
+def custom_df_method(self):
+    # self._df is the Polars DataFrame
+    return self._df.width
+
+extensions.register_dataframe_method("my_method", custom_df_method)
+
+# Now callable as:
+df.chem.my_method()
+```
+
+Both functions accept an `overwrite=True` parameter to replace existing methods.
 
 ---
 
@@ -813,7 +885,7 @@ df_druglike = df.filter(
 )
 
 # 5. Substructure search for carboxylic acids
-has_acid = df_druglike["Molecule"].chem.subsearch("C(=O)O")
+has_acid = df_druglike["Molecule"].chem.substructure_search("C(=O)O")
 df_acids = df_druglike.filter(has_acid)
 
 # 6. Export results

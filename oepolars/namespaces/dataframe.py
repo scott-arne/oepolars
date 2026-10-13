@@ -7,7 +7,7 @@ from pathlib import Path
 import polars as pl
 from openeye import oechem
 
-from oepolars.types import DesignUnitType
+from oepolars.types import DesignUnitType, MoleculeType
 from oepolars.types.molecule import MoleculeTypeInput
 from oepolars.types.query import QueryFormat, QueryFormatInput
 from oepolars.util import mol_to_bytes
@@ -92,6 +92,25 @@ class DataFrameChemNamespace:
     def __init__(self, df: pl.DataFrame) -> None:
         self._df = df
 
+    def with_token(self, column: str, token: str | None) -> pl.DataFrame:
+        """Return a frame whose *column* carries *token* in its dtype metadata.
+
+        Extension columns cannot be cast, so the column is rebuilt from its values;
+        the Python objects are shared, not copied.
+
+        :param column: Name of a MoleculeType, DisplayType or DesignUnitType column.
+        :param token: New token, or ``None`` to clear it.
+        :returns: The new frame.
+        :raises TypeError: If *column* is not an OpenEye extension column.
+        """
+        from oepolars.types import DisplayType
+
+        dtype = self._df.schema[column]
+        if not isinstance(dtype, (MoleculeType, DisplayType, DesignUnitType)):
+            raise TypeError(f"Column {column!r} has dtype {dtype}; with_token needs an OpenEye extension column")
+        series = pl.Series(column, self._df.get_column(column).to_list(), dtype=type(dtype)(token))
+        return self._df.with_columns(series)
+
     def as_molecule(
         self,
         columns: str | Iterable[str],
@@ -124,7 +143,7 @@ class DataFrameChemNamespace:
         result = self._df.clone()
 
         for col in columns:
-            new_col = result[col].chem.as_molecule(  # type: ignore[attr-defined]
+            new_col = result[col].chem.as_molecule(  # pyright: ignore[reportAttributeAccessIssue]
                 molecule_format=molecule_format,
                 molecule_type=molecule_type,
                 no_title=no_title,
@@ -160,7 +179,7 @@ class DataFrameChemNamespace:
             if _is_query_type(result.schema[col]) and not no_title:
                 continue
 
-            new_col = result[col].chem.as_query(  # type: ignore[attr-defined]
+            new_col = result[col].chem.as_query(  # pyright: ignore[reportAttributeAccessIssue]
                 query_format=query_format,
                 no_title=no_title,
             )
@@ -236,7 +255,7 @@ class DataFrameChemNamespace:
         for col in columns:
             dtype = self._df.schema[col]
             if _is_molecule_type(dtype) or _is_query_type(dtype) or _is_design_unit_type(dtype):
-                col_mask = self._df[col].chem.is_valid()  # type: ignore[attr-defined]
+                col_mask = self._df[col].chem.is_valid()  # pyright: ignore[reportAttributeAccessIssue]
             else:
                 col_mask = self._df[col].is_not_null()
             mask = mask & col_mask
@@ -245,23 +264,28 @@ class DataFrameChemNamespace:
 
     def substructure_search(
         self,
-        molecule_column: str,
+        column: str,
         pattern: str | oechem.OEQMol | oechem.OESubSearch,
         *,
         adjustH: bool = False,
     ) -> pl.DataFrame:
-        """Perform substructure search on a molecule column.
+        """Filter rows to those where molecules match a substructure pattern.
 
-        :param molecule_column: Name of the molecule column to search.
+        :param column: Name of the molecule column to search.
         :param pattern: SMARTS pattern string, OEQMol, or OESubSearch object.
         :param adjustH: If True, adjust implicit/explicit hydrogens to match query.
-        :returns: DataFrame containing rows that match the substructure.
-        :raises KeyError: If molecule_column does not exist.
-        """
-        if molecule_column not in self._df.columns:
-            raise KeyError(f"Column '{molecule_column}' not found in DataFrame")
+        :returns: DataFrame with rows that match the substructure.
+        :raises KeyError: If the column does not exist.
+        :raises TypeError: If the column is not a MoleculeType.
 
-        mask: pl.Series = self._df[molecule_column].chem.substructure_search(  # type: ignore[attr-defined]
+        Example::
+
+            df.chem.substructure_search("Molecule", "c1ccccc1")
+        """
+        if column not in self._df.columns:
+            raise KeyError(f"Column '{column}' not found in DataFrame")
+
+        mask = self._df[column].chem.substructure_search(  # pyright: ignore[reportAttributeAccessIssue]
             pattern,
             adjustH=adjustH,
         )
@@ -269,27 +293,32 @@ class DataFrameChemNamespace:
 
     def substructure_filter(
         self,
-        molecule_column: str,
+        column: str,
         pattern: str | oechem.OEQMol | oechem.OESubSearch,
         *,
         adjustH: bool = False,
     ) -> pl.DataFrame:
-        """Filter rows using Series substructure filter behavior.
+        """Filter out rows where molecules match a substructure pattern.
 
-        :param molecule_column: Name of the molecule column to filter.
+        :param column: Name of the molecule column to search.
         :param pattern: SMARTS pattern string, OEQMol, or OESubSearch object.
         :param adjustH: If True, adjust implicit/explicit hydrogens to match query.
-        :returns: DataFrame containing rows selected by the Series filter.
-        :raises KeyError: If molecule_column does not exist.
-        """
-        if molecule_column not in self._df.columns:
-            raise KeyError(f"Column '{molecule_column}' not found in DataFrame")
+        :returns: DataFrame with rows that do not match the substructure.
+        :raises KeyError: If the column does not exist.
+        :raises TypeError: If the column is not a MoleculeType.
 
-        mask: pl.Series = self._df[molecule_column].chem.substructure_filter(  # type: ignore[attr-defined]
+        Example::
+
+            df.chem.substructure_filter("Molecule", "c1ccccc1")
+        """
+        if column not in self._df.columns:
+            raise KeyError(f"Column '{column}' not found in DataFrame")
+
+        mask = self._df[column].chem.substructure_search(  # pyright: ignore[reportAttributeAccessIssue]
             pattern,
             adjustH=adjustH,
         )
-        return self._df.filter(mask)
+        return self._df.filter(~mask)
 
     def detect_molecule_columns(self, *, sample_size: int = 25) -> pl.DataFrame:
         """Auto-detect and convert molecule columns.
@@ -342,7 +371,9 @@ class DataFrameChemNamespace:
 
         # Convert detected columns
         if columns_to_convert:
-            result = result.chem.as_molecule(columns_to_convert)  # type: ignore[attr-defined]
+            result = result.chem.as_molecule(  # pyright: ignore[reportAttributeAccessIssue]
+                columns_to_convert
+            )
 
         return result
 
@@ -669,7 +700,7 @@ class DataFrameChemNamespace:
         # Set format explicitly to OEB for OEDB files (same binary format)
         ofs.SetFormat(oechem.OEFormat_OEB)
         if not ofs.open(str(Path(filepath))):
-            raise IOError(f"Failed to open file for writing: {filepath}")  # noqa: UP024
+            raise OSError(f"Failed to open file for writing: {filepath}")
 
         try:
             sd_cols_list = list(sd_columns) if sd_columns else []

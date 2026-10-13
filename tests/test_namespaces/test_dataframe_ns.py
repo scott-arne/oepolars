@@ -174,7 +174,76 @@ class TestDataFrameFilterValid:
             df.chem.filter_valid("nonexistent")
 
 
+class TestDataFrameDetectMoleculeColumns:
+    def test_detect_converts_smiles_columns(self):
+        df = pl.DataFrame({
+            "smiles": ["CCO", "c1ccccc1"],
+            "name": ["ethanol", "benzene"],
+        })
+        result = df.chem.detect_molecule_columns()
+        # SMILES strings should be detected and converted
+        assert result.schema["smiles"].ext_name() == "molecule"
+        assert result.schema["name"] == pl.String
+
+    def test_detect_converts_molecule_object_columns(self):
+        mol1 = oechem.OEMol()
+        oechem.OEParseSmiles(mol1, "CCO")
+        mol2 = oechem.OEMol()
+        oechem.OEParseSmiles(mol2, "c1ccccc1")
+        df = pl.DataFrame({
+            "mol": pl.Series([mol1, mol2], dtype=pl.Object),
+            "name": ["ethanol", "benzene"],
+        })
+        result = df.chem.detect_molecule_columns()
+        assert result.schema["mol"].ext_name() == "molecule"
+
+    def test_detect_leaves_non_molecule_columns(self):
+        df = pl.DataFrame({
+            "x": [1, 2, 3],
+            "y": ["a", "b", "c"],
+        })
+        result = df.chem.detect_molecule_columns()
+        assert result.schema["x"] == pl.Int64
+        assert result.schema["y"] == pl.String
+
+
 class TestDataFrameSubstructureSearch:
+    @pytest.fixture
+    def molecule_dataframe(self):
+        smiles_list = ["CCO", "c1ccccc1", "CC(=O)O", "c1ccc(O)cc1"]
+        mols = []
+        for smi in smiles_list:
+            mol = oechem.OEMol()
+            oechem.OEParseSmiles(mol, smi)
+            mols.append(mol)
+        return pl.DataFrame({
+            "Molecule": pl.Series(mols, dtype=MoleculeType()),
+            "name": ["ethanol", "benzene", "acetic acid", "phenol"],
+        })
+
+    def test_substructure_search_filters_matching_rows(self, molecule_dataframe):
+        result = molecule_dataframe.chem.substructure_search("Molecule", "c1ccccc1")
+        assert result.height == 2
+        assert result["name"].to_list() == ["benzene", "phenol"]
+
+    def test_substructure_filter_filters_non_matching_rows(self, molecule_dataframe):
+        result = molecule_dataframe.chem.substructure_filter("Molecule", "c1ccccc1")
+        assert result.height == 2
+        assert result["name"].to_list() == ["ethanol", "acetic acid"]
+
+    def test_substructure_search_and_filter_partition_rows(self, molecule_dataframe):
+        matches = molecule_dataframe.chem.substructure_search("Molecule", "c1ccccc1")
+        missed = molecule_dataframe.chem.substructure_filter("Molecule", "c1ccccc1")
+        assert matches.height + missed.height == molecule_dataframe.height
+
+    def test_substructure_search_column_not_found_raises(self, molecule_dataframe):
+        with pytest.raises(KeyError):
+            molecule_dataframe.chem.substructure_search("nonexistent", "c1ccccc1")
+
+    def test_substructure_filter_column_not_found_raises(self, molecule_dataframe):
+        with pytest.raises(KeyError):
+            molecule_dataframe.chem.substructure_filter("nonexistent", "c1ccccc1")
+
     def test_substructure_search_accepts_oeqmol(self):
         mols = []
         for smiles in ["CCO", "c1ccccc1", "c1ccc(O)cc1"]:
@@ -209,39 +278,6 @@ class TestDataFrameSubstructureSearch:
         result = df.chem.substructure_filter("mol", query)
 
         assert result["name"].to_list() == ["ethanol"]
-
-
-class TestDataFrameDetectMoleculeColumns:
-    def test_detect_converts_smiles_columns(self):
-        df = pl.DataFrame({
-            "smiles": ["CCO", "c1ccccc1"],
-            "name": ["ethanol", "benzene"],
-        })
-        result = df.chem.detect_molecule_columns()
-        # SMILES strings should be detected and converted
-        assert result.schema["smiles"].ext_name() == "molecule"
-        assert result.schema["name"] == pl.String
-
-    def test_detect_converts_molecule_object_columns(self):
-        mol1 = oechem.OEMol()
-        oechem.OEParseSmiles(mol1, "CCO")
-        mol2 = oechem.OEMol()
-        oechem.OEParseSmiles(mol2, "c1ccccc1")
-        df = pl.DataFrame({
-            "mol": pl.Series([mol1, mol2], dtype=pl.Object),
-            "name": ["ethanol", "benzene"],
-        })
-        result = df.chem.detect_molecule_columns()
-        assert result.schema["mol"].ext_name() == "molecule"
-
-    def test_detect_leaves_non_molecule_columns(self):
-        df = pl.DataFrame({
-            "x": [1, 2, 3],
-            "y": ["a", "b", "c"],
-        })
-        result = df.chem.detect_molecule_columns()
-        assert result.schema["x"] == pl.Int64
-        assert result.schema["y"] == pl.String
 
 
 class TestDataFrameWriteSDF:

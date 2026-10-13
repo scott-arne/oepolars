@@ -42,10 +42,15 @@ class TestLazyFrameRestrictedOperations:
         with pytest.raises(LazyOperationError, match="collect"):
             lf.chem.to_smiles("Molecule")
 
-    def test_subsearch_raises_lazy_operation_error(self):
+    def test_substructure_search_raises_lazy_operation_error(self):
         lf = oep.scan_sdf(FIXTURES_DIR / "sample.sdf")
         with pytest.raises(LazyOperationError, match="collect"):
-            lf.chem.subsearch("Molecule", "c1ccccc1")
+            lf.chem.substructure_search("Molecule", "c1ccccc1")
+
+    def test_substructure_filter_raises_lazy_operation_error(self):
+        lf = oep.scan_sdf(FIXTURES_DIR / "sample.sdf")
+        with pytest.raises(LazyOperationError, match="collect"):
+            lf.chem.substructure_filter("Molecule", "c1ccccc1")
 
     def test_filter_valid_raises_lazy_operation_error(self):
         lf = oep.scan_sdf(FIXTURES_DIR / "sample.sdf")

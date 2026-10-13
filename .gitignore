@@ -1,8 +1,7 @@
 # Created by .gitignore support plugin (hsz.mobi)
-
 .idea
 .ipynb_checkpoints
-docs/plans
+
 
 ### Python template
 # Byte-compiled / optimized / DLL files
@@ -64,5 +63,17 @@ target/
 
 # Mac Stuff
 .DS_Store
-/openeye/
+
+# Other things
 .git_backup/
+.worktrees/
+docs/plans
+docs/superpowers
+docs/hyperpowers
+docs/specs
+.superpowers
+.claude
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.vscode

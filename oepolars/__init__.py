@@ -2,7 +2,7 @@
 
 import logging
 
-__version__ = "0.2.0"
+__version__ = "0.4.0"
 
 # Configure logging
 log = logging.getLogger("oepolars")
@@ -35,6 +35,7 @@ log.setLevel(logging.INFO)
 # Export extension types
 # Export exceptions
 # Register namespaces (import for side effects)
+from oepolars import extensions  # noqa: E402
 from oepolars import namespaces as _namespaces  # noqa: E402, F401
 from oepolars.exceptions import (  # noqa: E402
     FileError,
@@ -89,6 +90,8 @@ __all__ = [
     "InvalidSMARTS",
     "InvalidMolecule",
     "LazyOperationError",
+    # Extension hooks
+    "extensions",
     # I/O functions
     "from_pandas",
     "read_molecule_csv",

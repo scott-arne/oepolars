@@ -79,15 +79,26 @@ class LazyFrameChemNamespace:
             "use the Series method: lf.collect()['column'].chem.to_smiles()"
         )
 
-    def subsearch(self, column: str, pattern: str) -> None:
+    def substructure_search(self, column: str, pattern: str) -> None:
         """Substructure search - NOT SUPPORTED on LazyFrames.
 
         :raises LazyOperationError: Always raised. Use ``.collect()`` first.
         """
         raise LazyOperationError(
-            "subsearch() requires eager evaluation. "
-            "Use lf.collect().chem.subsearch() instead, or "
-            "use the Series method: lf.collect()['column'].chem.subsearch()"
+            "substructure_search() requires eager evaluation. "
+            "Use lf.collect().chem.substructure_search() instead, or "
+            "use the Series method: lf.collect()['column'].chem.substructure_search()"
+        )
+
+    def substructure_filter(self, column: str, pattern: str) -> None:
+        """Substructure filter - NOT SUPPORTED on LazyFrames.
+
+        :raises LazyOperationError: Always raised. Use ``.collect()`` first.
+        """
+        raise LazyOperationError(
+            "substructure_filter() requires eager evaluation. "
+            "Use lf.collect().chem.substructure_filter() instead, or "
+            "use the Series method: lf.collect()['column'].chem.substructure_filter()"
         )
 
     def filter_valid(self, columns: str | list[str]) -> None:

@@ -42,6 +42,9 @@ class MoleculeType(pl.BaseExtension):
     Stores OEMol objects using Polars' Object dtype as underlying storage.
     OEGraphMol objects are automatically converted to OEMol on input.
 
+    :param token: Opaque per-column token stored in the dtype metadata; it survives
+        polars frame operations and lets clients key column-level settings.
+
     Example::
 
         from openeye import oechem
@@ -51,8 +54,13 @@ class MoleculeType(pl.BaseExtension):
         s.dtype.ext_name()  # Returns 'molecule'
     """
 
-    def __init__(self) -> None:
-        super().__init__("molecule", pl.Object, None)
+    def __init__(self, token: str | None = None) -> None:
+        super().__init__("molecule", pl.Object, token)
+
+    @property
+    def token(self) -> str | None:
+        """The per-column token, or ``None``."""
+        return self.ext_metadata()
 
 
 def _normalize_molecule_type(molecule_type: MoleculeTypeInput) -> MoleculeTypeKind:
