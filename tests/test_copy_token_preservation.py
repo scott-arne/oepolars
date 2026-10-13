@@ -77,3 +77,27 @@ def test_as_query_recopy_preserves_token():
     converted = s.chem.as_query(no_title=True)
     assert converted.chem.token == "keep"
     assert converted[0] is not s[0]
+
+
+def _queries(n):
+    out = []
+    for _ in range(n):
+        q = oechem.OEQMol()
+        oechem.OEParseSmarts(q, "c1ccccc1")
+        out.append(q)
+    return out
+
+
+def test_deepcopy_copies_queries_and_preserves_token():
+    s = pl.Series("query", _queries(2), dtype=oeplr.QueryType("tok"))
+    copied = s.chem.deepcopy()
+    assert isinstance(copied.dtype, oeplr.QueryType)
+    assert copied.chem.token == "tok"
+    assert isinstance(copied[0], oechem.OEQMol)
+    assert copied[0] is not s[0]
+
+
+def test_deepcopy_keeps_null_queries():
+    s = pl.Series("query", [*_queries(1), None], dtype=oeplr.QueryType())
+    copied = s.chem.deepcopy()
+    assert copied[1] is None

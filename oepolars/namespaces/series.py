@@ -203,13 +203,14 @@ class SeriesChemNamespace:
     def deepcopy(self) -> pl.Series:
         """Create a deep copy of the Series with independent object copies.
 
-        This method copies both the objects (molecules, displays, or fingerprints)
-        and the associated metadata, creating a fully independent copy of the Series.
+        This method copies both the objects (molecules, queries, displays, or
+        fingerprints) and the associated metadata, creating a fully independent copy
+        of the Series.
 
         :returns: A new Series with deep copies of all objects and a copy
             of the metadata dictionary.
-        :raises TypeError: If the Series is not a MoleculeType, DisplayType,
-            or FingerprintType.
+        :raises TypeError: If the Series is not a MoleculeType, QueryType,
+            DisplayType, or FingerprintType.
 
         Example::
 
@@ -222,12 +223,13 @@ class SeriesChemNamespace:
         """
         dtype = self._series.dtype
         is_molecule = _is_molecule_type(dtype)
+        is_query = _is_query_type(dtype)
         is_display = _is_display_type(dtype)
         is_fingerprint = _is_fingerprint_type(dtype)
 
-        if not (is_molecule or is_display or is_fingerprint):
+        if not (is_molecule or is_query or is_display or is_fingerprint):
             raise TypeError(
-                f"deepcopy() requires MoleculeType, DisplayType, or FingerprintType, "
+                f"deepcopy() requires MoleculeType, QueryType, DisplayType, or FingerprintType, "
                 f"got {dtype}"
             )
 
@@ -242,6 +244,18 @@ class SeriesChemNamespace:
 
             copied = [copy_mol(mol) for mol in self._series.to_list()]
             new_series = pl.Series(self._series.name, copied, dtype=MoleculeType(dtype.token))  # pyright: ignore[reportAttributeAccessIssue]
+
+        elif is_query:
+
+            def copy_query(
+                query: oechem.OEQMol | None,
+            ) -> oechem.OEQMol | None:
+                if query is None:
+                    return None
+                return _copy_query(query)
+
+            copied = [copy_query(query) for query in self._series.to_list()]
+            new_series = pl.Series(self._series.name, copied, dtype=QueryType(dtype.token))  # pyright: ignore[reportAttributeAccessIssue]
 
         elif is_display:
 
